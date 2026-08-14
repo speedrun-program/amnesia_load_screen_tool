@@ -2,6 +2,8 @@
   <Configurations>
     <Platform Name="x86" />
     <Platform Name="x64" />
+    <Configuration Name="Release" />
+    <Configuration Name="Debug" />
   </Configurations>
   <Project Path="amnesia_load_screen_tool/amnesia_load_screen_tool.vcxproj" Id="d1655aab-908a-4040-9c23-97d4168b2c1e" />
 </Solution>
