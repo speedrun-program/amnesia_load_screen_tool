@@ -10,25 +10,37 @@ how to make the game skip flashbacks in load screens:
   when this was written, the mods said they wouldn't let people use this feature.
   check if they allow this. If they don't, but you want to use it, tell them you think they should allow it.
 
-- in amnesia_settings.txt, set "skip flashbacks" to "y".
+- in amnesia_settings.txt, set "skip flashbacks" to "y", "t", or "1".
 
 
 ---------------------------------------------------------------------------------------------------
 how to make the game wait through flashbacks in load screens:
 ---------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "skip flashbacks" to "n".
+- in amnesia_settings.txt, set "skip flashbacks" to "n", "f", or "0".
 
 
 ---------------------------------------------------------------------------------------------------
 how to have menuing load delays for the main menu and for maps in quitouts which you quitout in:
 ---------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "delay files" to "y".
+- in amnesia_settings.txt, set "delay files" to "y", "t", or "1".
 
 
 ---------------------------------------------------------------------------------------------------
 how to turn off the menuing load delays for the main menu and for maps in quitouts which you quitout in:
 ---------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "delay files" to "n".
+- in amnesia_settings.txt, set "delay files" to "n", "f", or "0".
+
+
+---------------------------------------------------------------------------------------------------
+how to enable consistent slippery physics:
+---------------------------------------------------------------------------------------------------
+- in amnesia_settings.txt, set "enable consistent slippery physics" to "y", "t", or "1".
+
+
+---------------------------------------------------------------------------------------------------
+how to turn off consistent slippery physics:
+---------------------------------------------------------------------------------------------------
+- in amnesia_settings.txt, set "enable consistent slippery physics" to "n", "f", or "0".
 
 
 ---------------------------------------------------------------------------------------------------
@@ -62,22 +74,28 @@ how to add more flashbacks:
 ---------------------------------------------------------------------------------------------------
 how to use the tool with versions of the game it wasn't specifically made for:
 ---------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "allow unexpected game versions" to "y".
+- in amnesia_settings.txt, set "allow unexpected game versions" to "y", "t", or "1".
 
 
 ---------------------------------------------------------------------------------------------------
-how to skip checking for updates when injecting Amnesia with the tool:
+how to skip checking for updates when injecting Amnesia using the tool:
 ---------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "check for tool updates" to "y".
+- in amnesia_settings.txt, set "check for tool updates" to "n", "f", or "0".
 
 
 ---------------------------------------------------------------------------------------------------
 how to use the tool when it isn't, or might not be, the most recent version:
 ---------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "allow not fully updated tool" to "y".
+- in amnesia_settings.txt, set "allow not fully updated tool" to "y", "t", or "1".
 
 
 ---------------------------------------------------------------------------------------------------
-how to adjust the amount of time that can remain in a flashback dialogue line before the next map loads:
+how to adjust the amount of time that remains in a flashback dialogue line before the next map is entered:
 ---------------------------------------------------------------------------------------------------
 - in amnesia_settings.txt, adjust the "milliseconds remaining before unwait" setting.
+
+
+---------------------------------------------------------------------------------------------------
+how to adjust the amount of time the program tries to check for updates before timing out:
+---------------------------------------------------------------------------------------------------
+- in amnesia_settings.txt, adjust the "milliseconds update check timeout" setting.
