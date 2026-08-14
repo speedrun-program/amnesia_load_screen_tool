@@ -2,7 +2,7 @@
 #pragma once
 
 
-const char thisVersionDate[] = "2024-01-05";
+const char thisVersionDate[] = "2026-08-14";
 
 
 // variables shared between the main thread and the startup update check thread
