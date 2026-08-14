@@ -1,6 +1,6 @@
 <Solution>
   <Configurations>
-    <Platform Name="x86" />
+    <Platform Name="Win32" />
     <Platform Name="x64" />
     <Configuration Name="Release" />
     <Configuration Name="Debug" />
