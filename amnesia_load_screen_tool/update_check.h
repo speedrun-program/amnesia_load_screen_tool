@@ -148,7 +148,7 @@ RESOURCE_CLEANUP:
 }
 
 
-static bool isMostRecentVersion(bool* isMostRecentVersionResult, DWORD millisecondsUpdateCheckTimeout) {
+static bool isMostRecentVersion(bool* isMostRecentVersionResult, const DWORD millisecondsUpdateCheckTimeout) {
 
     GLOBAL_millisecondsUpdateCheckTimeout = millisecondsUpdateCheckTimeout;
 
