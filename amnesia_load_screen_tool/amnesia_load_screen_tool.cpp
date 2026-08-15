@@ -1216,8 +1216,8 @@ static bool injectDataAndInstructions(
     const char* commonPrefix,
     const bool enableSlipperyPhysics,
     bool* terminateAmnesia,
-    NTFUNCTION NtSuspendProcess,
-    NTFUNCTION NtResumeProcess) {
+    const NTFUNCTION NtSuspendProcess,
+    const NTFUNCTION NtResumeProcess) {
     
     if (!injectData(ph, ii, commonPrefix)) {
         return false;
