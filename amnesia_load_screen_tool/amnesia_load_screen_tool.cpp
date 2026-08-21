@@ -1564,7 +1564,7 @@ This tool might not work correctly with other versions of the game.\n%s",
     ii.injectedInstructionsLocation = (uint32_t)extraMemoryPtr;
     ii.injectedDataLocation = ii.injectedInstructionsLocation + spaceForInstructions;
 
-    printf("Instructions written at address %08x. Data written at address %08x.\n", ii.injectedInstructionsLocation, ii.injectedDataLocation);
+    // printf("Instructions written at address %08x. Data written at address %08x.\n", ii.injectedInstructionsLocation, ii.injectedDataLocation);
 
     // terminate Amnesia if the jmps and calls were written unsafely (partial writes or instruction cache couldn't be flushed).
     bool terminateAmnesia = false;
