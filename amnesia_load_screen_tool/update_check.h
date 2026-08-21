@@ -46,7 +46,7 @@ static DWORD WINAPI versionCheckThread(LPVOID lpParameter) {
         GLOBAL_millisecondsUpdateCheckTimeout, // Resolve timeout
         GLOBAL_millisecondsUpdateCheckTimeout, // Connect timeout
         GLOBAL_millisecondsUpdateCheckTimeout, // Send timeout
-        GLOBAL_millisecondsUpdateCheckTimeout // Receive timeout
+        GLOBAL_millisecondsUpdateCheckTimeout  // Receive timeout
     );
 
     hConnection = WinHttpConnect(        // resource acquired (2)
@@ -148,9 +148,9 @@ RESOURCE_CLEANUP:
 }
 
 
-static bool isMostRecentVersion(bool* isMostRecentVersionResult, const DWORD millisecondsUpdateCheckTimeout) {
+static bool isMostRecentVersion(bool* isMostRecentVersionResult, const uint32_t millisecondsUpdateCheckTimeout) {
 
-    GLOBAL_millisecondsUpdateCheckTimeout = millisecondsUpdateCheckTimeout;
+    GLOBAL_millisecondsUpdateCheckTimeout = (DWORD)millisecondsUpdateCheckTimeout;
 
     bool updateCheckSucceeded = false;
     *isMostRecentVersionResult = false;

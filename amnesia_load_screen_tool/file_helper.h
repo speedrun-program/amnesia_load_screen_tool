@@ -6,10 +6,10 @@ class FileHelper {
 
 public:
 
-    FILE* f = nullptr;
-    size_t bufferPosition = 0;
-    size_t charactersRead = 0;
-    unsigned char buffer[4096] = { 0 };
+    FILE* m_file = nullptr;
+    size_t m_bufferPosition = 0;
+    size_t m_charactersRead = 0;
+    unsigned char m_buffer[4096] = { 0 };
 
     FileHelper(const FileHelper& fhelper) = delete;
     FileHelper& operator=(FileHelper other) = delete;
@@ -20,11 +20,11 @@ public:
     FileHelper(const char* fileName) {
 
 #ifdef _WIN32
-        if (fopen_s(&f, fileName, "rb") != 0 || !f) {
+        if (fopen_s(&m_file, fileName, "rb") != 0 || m_file == nullptr) {
 #else
-        if (!(f = fopen(fileName, "rb"))) {
+        if (!(m_file = fopen(fileName, "rb"))) {
 #endif
-            printf("FileHelper couldn't open %s.\n", fileName);
+            printf("fopen error when trying to open %s (errno %d).\n", fileName, errno);
 
             return;
         }
@@ -33,31 +33,31 @@ public:
 
     ~FileHelper() {
 
-        if (f) {
-            fclose(f);
+        if (m_file != nullptr) {
+            fclose(m_file);
         }
     }
 
 
     bool getCharacter(char* ch) {
 
-        if (f == nullptr) {
-            printf("FileHelper error: FILE* f was NULL.\n");
+        if (m_file == nullptr) {
+            printf("FileHelper error: FILE* m_file was NULL.\n");
 
             return false;
         }
 
-        if (bufferPosition == charactersRead) {
-            bufferPosition = 0;
-            charactersRead = fread(buffer, 1, sizeof(buffer), f);
+        if (m_bufferPosition == m_charactersRead) {
+            m_bufferPosition = 0;
+            m_charactersRead = fread(m_buffer, 1, sizeof(m_buffer), m_file);
 
-            if (!charactersRead) {
+            if (m_charactersRead == 0) {
                 return false;
             }
         }
 
-        *ch = buffer[bufferPosition];
-        bufferPosition += 1;
+        *ch = m_buffer[m_bufferPosition];
+        m_bufferPosition += 1;
 
         return true;
     }

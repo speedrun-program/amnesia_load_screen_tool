@@ -2,7 +2,7 @@
 #pragma once
 
 
-unsigned char mainMenuDelayInstructions[64] = {
+unsigned char mainMenuDelayInstructions[58] = {
 
     0x68, 0x00, 0x00, 0x00, 0x00,                // push mainMenuDelay
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00,          // call Sleep // this undoes the last push
@@ -22,19 +22,34 @@ unsigned char mainMenuDelayInstructions[64] = {
     0x5a,                                        // pop edx
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00,          // saveQuitBytes
     0xc3,                                        // ret
-
-    0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,          // int3 filler so this is 64 bytes
 };
 
 
-unsigned char mapDelayInstructions[128] = {
+unsigned char mapDelayInstructions[134] = {
 
-    // entry point if quickloading
-    0xe8, 0x00, 0x00, 0x00, 0x00,                // call DestroyMap
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,    // copied bytes from loadFromMenuBytes
-    0xe9, 0x00, 0x00, 0x00, 0x00,                // jmp back to amnesia (after copied bytes)
+    // entry point if quickloading (bytes differ depending on if quickloads are being delayed or not)
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 
-    0xcc,                                        // int3 filler so the loop is aligned by 64 bytes
+    // if there's a quickload delay //
+    //////////////////////////////////
+    // 0xe8, 0x00, 0x00, 0x00, 0x00,                // call DestroyMap
+    // 0x68, 0x00, 0x00, 0x00, 0x00,                // push quickloadDelay
+    // 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,          // call Sleep // this undoes the last push
+    // 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,    // copied bytes from loadFromMenuBytes
+    // 0xe9, 0x00, 0x00, 0x00, 0x00,                // jmp back to amnesia (after copied bytes)
+    //////////////////////////////////
+
+    // if there isn't a quickload delay //
+    //////////////////////////////////////
+    // 0xe8, 0x00, 0x00, 0x00, 0x00,                // call DestroyMap
+    // 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,    // copied bytes from loadFromMenuBytes
+    // 0xe9, 0x00, 0x00, 0x00, 0x00,                // jmp back to amnesia (after copied bytes)
+    // 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,          // int3 filler
+    // 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,                // int3 filler
+    //////////////////////////////////////
 
     // entry point if not quickloading
     0x53,                                        // push ebx
@@ -86,7 +101,7 @@ unsigned char mapDelayInstructions[128] = {
     0x00, 0x00, 0x00, 0x00, 0x00,                // the last 5 copied bytes from loadFromMenuBytes
     0xe9, 0x00, 0x00, 0x00, 0x00,                // jmp back to amnesia (after copied bytes)
 
-    0xcc, 0xcc, 0xcc, 0xcc, 0xcc,                // int3 filler so this is 128 bytes
+    0xcc,                                        // int3 filler so this is and the main menu delay instructions are 192 bytes
 };
 
 

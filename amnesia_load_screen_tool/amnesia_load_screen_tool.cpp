@@ -51,13 +51,14 @@ struct InjectionInfo {
     uint32_t lengthOfCommonPrefix = 0;
     uint32_t howManyMapNames = 0;
     uint32_t lengthOfLongestMapName = 0;
-    uint32_t mainMenuDelay = 0;
     uint32_t spaceForCommonPrefix = 0;
     uint32_t spacePerFlashbackName = 0;
     uint32_t sizeOfFlashbackNameArea = 0;
     uint32_t spacePerMapName = 0;
     uint32_t sizeOfMapsAndDelaysArea = 0;
     uint32_t spaceForInstructions = 0;
+    uint32_t mainMenuDelay = 0;
+    uint32_t quickloadDelay = 0;
     bool skippingFlashBacks = false;
     unsigned char secondsRemainingBeforeUnwait[sizeof(double)] = { 0 };
 
@@ -82,7 +83,8 @@ struct InjectionInfo {
     unsigned char getTotalTimeOffset = 0;
     unsigned char getElapsedTimeOffset = 0;
 
-    bool delayingMainMenu = false;
+    bool delayMaps = false;
+    bool enableSlipperyPhysics = false;
 };
 
 
@@ -124,6 +126,36 @@ static void getExitInput(const bool succeeded) {
     int ch = 0;
     printf("%sPress Enter to close this window.\n", succeeded ? "Amnesia successfully injected.\n" : "Couldn't inject Amnesia.\n");
     ch = getchar();
+}
+
+
+static bool findNtFunctions(NTFUNCTION* NtSuspendProcess, NTFUNCTION* NtResumeProcess) {
+
+    HMODULE ntdllHandle = GetModuleHandle(L"ntdll.dll");
+
+    if (!ntdllHandle) {
+        printf("Error using GetModuleHandle to find ntdll.dll (error code %u).\n", GetLastError());
+
+        return false;
+    }
+
+    *NtSuspendProcess = (NTFUNCTION)GetProcAddress(ntdllHandle, "NtSuspendProcess");
+
+    if (!*NtSuspendProcess) {
+        printf("Error using GetProcAddress to find NtSuspendProcess (error code %u)\n.", GetLastError());
+
+        return false;
+    }
+
+    *NtResumeProcess = (NTFUNCTION)GetProcAddress(ntdllHandle, "NtResumeProcess");
+
+    if (!*NtResumeProcess) {
+        printf("Error using GetProcAddress to find NtResumeProcess (error code %u).\n", GetLastError());
+
+        return false;
+    }
+
+    return true;
 }
 
 
@@ -170,36 +202,6 @@ static DWORD findAmnesiaPid(bool* isSteamVersion) {
 }
 
 
-static bool findNtFunctions(NTFUNCTION* NtSuspendProcess, NTFUNCTION* NtResumeProcess) {
-
-    HMODULE ntdllHandle = GetModuleHandle(L"ntdll.dll");
-
-    if (!ntdllHandle) {
-        printf("Error using GetModuleHandle to find ntdll.dll (error code %u).\n", GetLastError());
-
-        return false;
-    }
-
-    *NtSuspendProcess = (NTFUNCTION)GetProcAddress(ntdllHandle, "NtSuspendProcess");
-
-    if (!*NtSuspendProcess) {
-        printf("Error using GetProcAddress to find NtSuspendProcess (error code %u)\n.", GetLastError());
-
-        return false;
-    }
-
-    *NtResumeProcess = (NTFUNCTION)GetProcAddress(ntdllHandle, "NtResumeProcess");
-
-    if (!*NtResumeProcess) {
-        printf("Error using GetProcAddress to find NtResumeProcess (error code %u).\n", GetLastError());
-
-        return false;
-    }
-
-    return true;
-}
-
-
 static char* checkIfYesOrNo(const char* s, bool* setting, bool* settingReadSuccessfully) {
 
     *settingReadSuccessfully = true;
@@ -218,6 +220,35 @@ static char* checkIfYesOrNo(const char* s, bool* setting, bool* settingReadSucce
 }
 
 
+static char* getUint32FromChars(const char* s, uint32_t* ptrToUint32, uint32_t maxNumberValue, bool* uint32ReadSuccessfully) {
+
+    *uint32ReadSuccessfully = false;
+
+    bool numberCharacterSeen = false;
+
+    uint32_t currentValue = 0;
+
+    for (; *s != '\n' && *s != '\0'; s++) {
+        if (*s >= '0' && *s <= '9') {
+            numberCharacterSeen = true;
+
+            currentValue *= 10;
+            currentValue += *s - '0';
+
+            if (currentValue > maxNumberValue) {
+                return (char*)s;
+            }
+        }
+    }
+
+    *ptrToUint32 = currentValue;
+
+    *uint32ReadSuccessfully = numberCharacterSeen;
+
+    return (char*)s;
+}
+
+
 static bool readSettingsFile(
         bool* skippingFlashbacks,
         bool* delayMaps,
@@ -225,17 +256,21 @@ static bool readSettingsFile(
         bool* allowUnexpectedGameVersions,
         bool* checkForToolUpdates,
         bool* allowNotFullyUpdatedTool,
+        uint32_t* millisecondsMainMenuDelay,
+        uint32_t* millisecondsQuickloadDelay,
         double* secondsRemainingBeforeUnwait,
-        DWORD* millisecondsUpdateCheckTimeout) {
+        uint32_t* millisecondsUpdateCheckTimeout) {
 
     char buffer[512] = { 0 };
 
     const char defaultText[] = "skip flashbacks: n\r\n\
-delay maps: y\r\n\
+delay maps: n\r\n\
 enable consistent slippery physics: y\r\n\
 allow unexpected game versions: n\r\n\
 check for tool updates: y\r\n\
 allow not fully updated tool: n\r\n\
+milliseconds main menu delay: 0\r\n\
+milliseconds quickload delay: 0\r\n\
 milliseconds remaining before unwait: 435\r\n\
 milliseconds update check timeout: 5000\r\n";
 
@@ -249,20 +284,30 @@ milliseconds update check timeout: 5000\r\n";
     const char nameOfAllowUnexpectedGameVersions[] = "allow unexpected game versions:";
     const char nameOfCheckForToolUpdates[] = "check for tool updates:";
     const char nameOfAllowNotFullyUpdatedTool[] = "allow not fully updated tool:";
+    const char nameOfMillisecondsMainMenuDelay[] = "milliseconds main menu delay:";
+    const char nameOfMillisecondsQuickloadDelay[] = "milliseconds quickload delay:";
     const char nameOfMillisecondsRemainingBeforeUnwait[] = "milliseconds remaining before unwait:";
     const char nameOfMillisecondsUpdateCheckTimeout[] = "milliseconds update check timeout:";
 
-    bool skipFlashbacksSettingFound = false;
-    bool delayMapsSettingFound = false;
-    bool enableSlipperyPhysicsSettingFound = false;
-    bool allowUnexpectedGameVersionsSettingFound = false;
-    bool checkForToolUpdatesSettingFound = false;
-    bool allowNotFullyUpdatedToolSettingFound = false;
+    bool skipFlashbacksSettingRead = false;
+    bool delayMapsSettingRead = false;
+    bool enableSlipperyPhysicsSettingRead = false;
+    bool allowUnexpectedGameVersionsSettingRead = false;
+    bool checkForToolUpdatesSettingRead = false;
+    bool allowNotFullyUpdatedToolSettingRead = false;
+    bool millisecondsMainMenuDelayRead = false;
+    bool millisecondsQuickloadDelayRead = false;
+    bool millisecondsRemainingBeforeUnwaitRead = false;
+    bool millisecondsUpdateCheckTimeoutRead = false;
+
+    uint32_t millisecondsRemainingBeforeUnwait = 0; // this is used later to calculate a double value for secondsRemainingBeforeUnwait
+
+    uint32_t maxNumberValue = 100000000; // big enough value which also makes overflow impossible here
 
     FILE* f = nullptr;
 
-    if (fopen_s(&f, settingsFileName, "rb") != 0 || !f) {    // resource acquired (1)
-        printf("Couldn't open %s.\n", settingsFileName);
+    if (fopen_s(&f, settingsFileName, "rb") != 0 || f == nullptr) {    // resource acquired (1)
+        printf("fopen error when trying to open %s (errno %d).\n", settingsFileName, errno);
 
         return false;
     }
@@ -277,8 +322,8 @@ milliseconds update check timeout: 5000\r\n";
     if (bytesRead == sizeof(buffer)) {
         printf("%s should be smaller than %zu bytes.\nResetting %s.\n", settingsFileName, sizeof(buffer), settingsFileName);
 
-        if (fopen_s(&f, settingsFileName, "wb") != 0 || !f) { // resource acquired (2)
-            printf("Couldn't open %s.\n", settingsFileName);
+        if (fopen_s(&f, settingsFileName, "wb") != 0 || f == nullptr) { // resource acquired (2)
+            printf("fopen error when trying to open %s (errno %d).\n", settingsFileName, errno);
 
             return false;
         }
@@ -290,13 +335,6 @@ milliseconds update check timeout: 5000\r\n";
         return false;
     }
 
-    char* strtolWaitStartPtr = nullptr;
-    char* strtolWaitEndPtr = nullptr;
-    char* strtolTimeoutStartPtr = nullptr;
-    char* strtolTimeoutEndPtr = nullptr;
-    long millisecondsRemainingBeforeUnwait = 0;
-    long millisecondsUpdateCheckTimeoutLong = 0;
-
     for (char* bufferPtr = buffer; bufferPtr != nullptr && *bufferPtr != '\0'; bufferPtr = strchr(bufferPtr, '\n')) {
         
         bufferPtr += strspn(bufferPtr, " \f\t\v\r\n"); // going to the start of the next line in the file
@@ -306,7 +344,7 @@ milliseconds update check timeout: 5000\r\n";
             bufferPtr = checkIfYesOrNo(
                 bufferPtr + sizeof(nameOfSkipFlashbacksSetting) - 1,
                 skippingFlashbacks,
-                &skipFlashbacksSettingFound
+                &skipFlashbacksSettingRead
             );
 
         } else if (strncmp(bufferPtr, nameOfDelayMapsSetting, sizeof(nameOfDelayMapsSetting) - 1) == 0) {
@@ -314,7 +352,7 @@ milliseconds update check timeout: 5000\r\n";
             bufferPtr = checkIfYesOrNo(
                 bufferPtr + sizeof(nameOfDelayMapsSetting) - 1,
                 delayMaps,
-                &delayMapsSettingFound
+                &delayMapsSettingRead
             );
 
         } else if (strncmp(bufferPtr, nameOfEnableSlipperyPhysics, sizeof(nameOfEnableSlipperyPhysics) - 1) == 0) {
@@ -322,7 +360,7 @@ milliseconds update check timeout: 5000\r\n";
             bufferPtr = checkIfYesOrNo(
                 bufferPtr + sizeof(nameOfEnableSlipperyPhysics) - 1,
                 enableSlipperyPhysics,
-                &enableSlipperyPhysicsSettingFound
+                &enableSlipperyPhysicsSettingRead
             );
 
         } else if (strncmp(bufferPtr, nameOfAllowUnexpectedGameVersions, sizeof(nameOfAllowUnexpectedGameVersions) - 1) == 0) {
@@ -330,7 +368,7 @@ milliseconds update check timeout: 5000\r\n";
             bufferPtr = checkIfYesOrNo(
                 bufferPtr + sizeof(nameOfAllowUnexpectedGameVersions) - 1,
                 allowUnexpectedGameVersions,
-                &allowUnexpectedGameVersionsSettingFound
+                &allowUnexpectedGameVersionsSettingRead
             );
 
         } else if (strncmp(bufferPtr, nameOfCheckForToolUpdates, sizeof(nameOfCheckForToolUpdates) - 1) == 0) {
@@ -338,7 +376,7 @@ milliseconds update check timeout: 5000\r\n";
             bufferPtr = checkIfYesOrNo(
                 bufferPtr + sizeof(nameOfCheckForToolUpdates) - 1,
                 checkForToolUpdates,
-                &checkForToolUpdatesSettingFound
+                &checkForToolUpdatesSettingRead
             );
 
         } else if (strncmp(bufferPtr, nameOfAllowNotFullyUpdatedTool, sizeof(nameOfAllowNotFullyUpdatedTool) - 1) == 0) {
@@ -346,60 +384,73 @@ milliseconds update check timeout: 5000\r\n";
             bufferPtr = checkIfYesOrNo(
                 bufferPtr + sizeof(nameOfAllowNotFullyUpdatedTool) - 1,
                 allowNotFullyUpdatedTool,
-                &allowNotFullyUpdatedToolSettingFound
+                &allowNotFullyUpdatedToolSettingRead
+            );
+
+        } else if (strncmp(bufferPtr, nameOfMillisecondsMainMenuDelay, sizeof(nameOfMillisecondsMainMenuDelay) - 1) == 0) {
+
+            bufferPtr = getUint32FromChars(
+                bufferPtr + sizeof(nameOfMillisecondsMainMenuDelay) - 1,
+                millisecondsMainMenuDelay,
+                maxNumberValue,
+                &millisecondsMainMenuDelayRead
+            );
+
+        } else if (strncmp(bufferPtr, nameOfMillisecondsQuickloadDelay, sizeof(nameOfMillisecondsQuickloadDelay) - 1) == 0) {
+
+            bufferPtr = getUint32FromChars(
+                bufferPtr + sizeof(nameOfMillisecondsQuickloadDelay) - 1,
+                millisecondsQuickloadDelay,
+                maxNumberValue,
+                &millisecondsQuickloadDelayRead
             );
 
         } else if (strncmp(bufferPtr, nameOfMillisecondsRemainingBeforeUnwait, sizeof(nameOfMillisecondsRemainingBeforeUnwait) - 1) == 0) {
 
-            strtolWaitStartPtr = bufferPtr + sizeof(nameOfMillisecondsRemainingBeforeUnwait) - 1;
-            millisecondsRemainingBeforeUnwait = strtol(strtolWaitStartPtr, &strtolWaitEndPtr, 10);
-            bufferPtr = strtolWaitEndPtr;
+            bufferPtr = getUint32FromChars(
+                bufferPtr + sizeof(nameOfMillisecondsRemainingBeforeUnwait) - 1,
+                &millisecondsRemainingBeforeUnwait,
+                maxNumberValue,
+                &millisecondsRemainingBeforeUnwaitRead
+            );
 
         } else if (strncmp(bufferPtr, nameOfMillisecondsUpdateCheckTimeout, sizeof(nameOfMillisecondsUpdateCheckTimeout) - 1) == 0) {
 
-            strtolTimeoutStartPtr = bufferPtr + sizeof(nameOfMillisecondsUpdateCheckTimeout) - 1;
-            millisecondsUpdateCheckTimeoutLong = strtol(strtolTimeoutStartPtr, &strtolTimeoutEndPtr, 10);
-            bufferPtr = strtolTimeoutEndPtr;
+            bufferPtr = getUint32FromChars(
+                bufferPtr + sizeof(nameOfMillisecondsUpdateCheckTimeout) - 1,
+                millisecondsUpdateCheckTimeout,
+                maxNumberValue,
+                &millisecondsUpdateCheckTimeoutRead
+            );
 
         }
     }
 
-    if (strtolWaitStartPtr == strtolWaitEndPtr) {
-        printf("Couldn't read \"milliseconds remaining before unwait\" setting.\n");
-        millisecondsRemainingBeforeUnwait = 0;
-    } else if (millisecondsRemainingBeforeUnwait <= 0) {
-        printf("Milliseconds remaining before unwait must be greater than zero.\n");
+    if (
+        *millisecondsMainMenuDelay > maxNumberValue
+        || *millisecondsQuickloadDelay > maxNumberValue
+        || millisecondsRemainingBeforeUnwait > maxNumberValue
+        || *millisecondsUpdateCheckTimeout > maxNumberValue) {
+        printf("Number values in amnesia_settings.txt must be less than or equal to %u.\n", maxNumberValue);
     }
-
-    if (millisecondsUpdateCheckTimeoutLong >= 4294967295) {
-        printf("Milliseconds update check timeout must be less than than 4294967295.\n");
-        millisecondsUpdateCheckTimeoutLong = 0;
-    } else if (strtolTimeoutStartPtr == strtolTimeoutEndPtr) {
-        printf("Couldn't read \"milliseconds update check timeout\" setting.\n");
-        millisecondsUpdateCheckTimeoutLong = 0;
-    } else if (millisecondsUpdateCheckTimeoutLong <= 0) {
-        printf("Milliseconds update check timeout must be greater than zero.\n");
-    }
-
-    *secondsRemainingBeforeUnwait = millisecondsRemainingBeforeUnwait / 1000.0;
-
-    *millisecondsUpdateCheckTimeout = (DWORD)millisecondsUpdateCheckTimeoutLong;
 
     if (!(
-            skipFlashbacksSettingFound
-            && delayMapsSettingFound
-            && enableSlipperyPhysicsSettingFound
-            && allowUnexpectedGameVersionsSettingFound
-            && checkForToolUpdatesSettingFound
-            && allowNotFullyUpdatedToolSettingFound
-            && (millisecondsRemainingBeforeUnwait > 0)
-            && (millisecondsUpdateCheckTimeoutLong > 0)
+            skipFlashbacksSettingRead
+            && delayMapsSettingRead
+            && enableSlipperyPhysicsSettingRead
+            && allowUnexpectedGameVersionsSettingRead
+            && checkForToolUpdatesSettingRead
+            && allowNotFullyUpdatedToolSettingRead
+            && millisecondsMainMenuDelayRead
+            && millisecondsQuickloadDelayRead
+            && millisecondsRemainingBeforeUnwaitRead
+            && millisecondsUpdateCheckTimeoutRead
         )) {
 
         printf("Couldn't read all settings in %s.\nResetting %s.\n", settingsFileName, settingsFileName);
 
-        if (fopen_s(&f, settingsFileName, "wb") != 0 || !f) { // resource acquired (3)
-            printf("Couldn't open %s.\n", settingsFileName);
+        if (fopen_s(&f, settingsFileName, "wb") != 0 || f == nullptr) { // resource acquired (3)
+            printf("fopen error when trying to open %s (errno %d).\n", settingsFileName, errno);
 
             return false;
         }
@@ -410,6 +461,11 @@ milliseconds update check timeout: 5000\r\n";
 
         return false;
     }
+
+    millisecondsRemainingBeforeUnwait += (millisecondsRemainingBeforeUnwait == 0);
+    *millisecondsUpdateCheckTimeout += (*millisecondsUpdateCheckTimeout == 0);
+
+    *secondsRemainingBeforeUnwait = millisecondsRemainingBeforeUnwait / 1000.0;
     
     return true;
 }
@@ -424,7 +480,7 @@ static bool preprocessFlashbackNamesFile(
 
     FileHelper fh("flashback_names.txt");
     
-    if (!fh.f) {
+    if (fh.m_file == nullptr) {
         return false;
     }
 
@@ -491,11 +547,11 @@ static bool preprocessFlashbackNamesFile(
 }
 
 
-static bool preprocessMapDelaysFile(uint32_t* howManyMapNames, uint32_t* lengthOfLongestMapName, bool* delayingMainMenu) {
+static bool preprocessMapDelaysFile(uint32_t* howManyMapNames, uint32_t* lengthOfLongestMapName) {
 
     FileHelper fh("maps_and_delays.txt");
 
-    if (!fh.f) {
+    if (fh.m_file == nullptr) {
         return false;
     }
 
@@ -508,10 +564,6 @@ static bool preprocessMapDelaysFile(uint32_t* howManyMapNames, uint32_t* lengthO
         } else if (ch == '/' || ch == '\n') {
             if (*lengthOfLongestMapName < currentMapNameLength) {
                 *lengthOfLongestMapName = currentMapNameLength;
-            }
-
-            if (ch == '/' || currentMapNameLength == 0) {
-                *delayingMainMenu = true;
             }
 
             *howManyMapNames += (currentMapNameLength != 0);
@@ -548,7 +600,7 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
     }
 
     // finding where to write to and copy from in amnesia's memory based on instruction byte patterns
-    for (size_t currentMemoryAddress = ph->textSegmentLocation; ph->getByte(&b); currentMemoryAddress++) {
+    for (size_t currentMemoryAddress = ph->m_textSegmentLocation; ph->getByte(&b); currentMemoryAddress++) {
         memorySlice.addToEnd(b);
 
         if (memorySlice[0] == 0x8b && memorySlice[1] == 0x88 && memorySlice[6] == 0xe8 && memorySlice[11] == 0x8b && memorySlice[14] == 0x51) {
@@ -710,7 +762,7 @@ static bool injectFlashbackNames(ProcessHelper* ph, const InjectionInfo* ii) {
 
     FileHelper fh("flashback_names.txt");
 
-    if (!fh.f) {
+    if (fh.m_file == nullptr) {
         return false;
     }
 
@@ -769,14 +821,13 @@ static bool injectMapNamesAndDelays(ProcessHelper* ph, InjectionInfo* ii) {
 
     FileHelper fh("maps_and_delays.txt");
 
-    if (!fh.f) {
+    if (fh.m_file == nullptr) {
         return false;
     }
 
-    bool menuDelayWritten = false;
     char ch = '\0';
     
-    // base loop terminates based on how many bytes have been written in case maps_and_delays.txt size was somehow changed
+    // use this variable in case maps_and_delays.txt size was somehow changed
     bool keepReading = true;
 
     for (uint32_t namesWritten = 0; keepReading && namesWritten < ii->howManyMapNames;) {
@@ -820,10 +871,8 @@ static bool injectMapNamesAndDelays(ProcessHelper* ph, InjectionInfo* ii) {
         // finishing reading the line
         while (ch != '\n' && (keepReading = fh.getCharacter(&ch)));
 
-        if (sectionPosition == 0) { // this line had the main menu delay, so set ii->mainMenuDelay to delay
-            ii->mainMenuDelay = delay;
-            menuDelayWritten = true;
-        } else {
+        if (sectionPosition != 0) { // if sectionPosition == 0 then no map name was written, so just move on
+
             // filling in the remaining space with 0x00 bytes
             // there should always be at least one 0x00 byte
             for (; sectionPosition < ii->spacePerMapName - sizeof(uint32_t); sectionPosition++) {
@@ -840,38 +889,6 @@ static bool injectMapNamesAndDelays(ProcessHelper* ph, InjectionInfo* ii) {
             }
 
             namesWritten += 1;
-        }
-    }
-
-    // the main menu delay wasn't found, probably because it's at the end
-    while (ii->delayingMainMenu && !menuDelayWritten && keepReading) {
-        fh.getCharacter(&ch); // getting the line's first character
-
-        if (ch != '/') {
-            while (ch != '\n' && (keepReading = fh.getCharacter(&ch))); // going to the next line
-        } else {
-            menuDelayWritten = true;
-
-            // going to the digits
-            while (ch != '\n' && !(ch >= '0' && ch <= '9') && (keepReading = fh.getCharacter(&ch)));
-
-            // determining the delay time
-            if (ch >= '0' && ch <= '9') {
-                uint32_t delay = 0;
-
-                do {
-                    delay *= 10;
-                    delay += ch - '0';
-
-                    if (delay > 0xffffff) { // ensure at least one byte stays 0x00 in case strncmp somehow reads into this value
-                        printf("Map delays can't be more than 0xffffff.\n");
-
-                        return false;
-                    }
-                } while ((keepReading = fh.getCharacter(&ch)) && (ch >= '0' && ch <= '9'));
-
-                ii->mainMenuDelay = delay;
-            }
         }
     }
 
@@ -947,6 +964,24 @@ static void prepareMainMenuDelayInstructions(const InjectionInfo* ii, unsigned c
 
 static void prepareMapDelayInstructions(const InjectionInfo* ii, unsigned char* instructionBufferPtr) {
 
+    const size_t quickloadsSectionSize = 28;
+
+    unsigned char delayingQuickloadsBytes[quickloadsSectionSize] = {
+        0xe8, 0x00, 0x00, 0x00, 0x00,                // call DestroyMap
+        0x68, 0x00, 0x00, 0x00, 0x00,                // push quickloadDelay
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00,          // call Sleep // this undoes the last push
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,    // copied bytes from loadFromMenuBytes
+        0xe9, 0x00, 0x00, 0x00, 0x00,                // jmp back to amnesia (after copied bytes)
+    };
+
+    unsigned char notDelayingQuickloadsBytes[quickloadsSectionSize] = {
+        0xe8, 0x00, 0x00, 0x00, 0x00,                // call DestroyMap
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,    // copied bytes from loadFromMenuBytes
+        0xe9, 0x00, 0x00, 0x00, 0x00,                // jmp back to amnesia (after copied bytes)
+        0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,          // int3 filler
+        0xcc, 0xcc, 0xcc, 0xcc, 0xcc,                // int3 filler
+    };
+
     instructionBufferPtr += sizeof(mainMenuDelayInstructions);
 
     memcpy(instructionBufferPtr, mapDelayInstructions, sizeof(mapDelayInstructions));
@@ -956,20 +991,48 @@ static void prepareMapDelayInstructions(const InjectionInfo* ii, unsigned char* 
     uint32_t noMoreMapNamesAddress = firstMapNameAddress + (ii->spacePerMapName * ii->howManyMapNames);
     uint32_t delayOffset = ii->spacePerMapName - sizeof(uint32_t);
     uint32_t DestroyMapCallOffset = ii->DestroyMapLocation - (mapDelayInstructionsStart + 5);
-    uint32_t backToAmnesiaOffset1 = (ii->loadingFromMenuLocation + sizeof(ii->loadingFromMenuBytes) - 2) - (mapDelayInstructionsStart + 17);
-    uint32_t backToAmnesiaOffset2 = (ii->loadingFromMenuLocation + sizeof(ii->loadingFromMenuBytes) - 2) - (mapDelayInstructionsStart + 123);
 
-    memcpy(&instructionBufferPtr[1], &DestroyMapCallOffset, sizeof(DestroyMapCallOffset));
-    memcpy(&instructionBufferPtr[5], ii->loadingFromMenuBytes, sizeof(ii->loadingFromMenuBytes));
-    memcpy(&instructionBufferPtr[13], &backToAmnesiaOffset1, sizeof(backToAmnesiaOffset1));
-    memcpy(&instructionBufferPtr[22], &ii->spacePerMapName, sizeof(ii->spacePerMapName));
-    memcpy(&instructionBufferPtr[28], &ii->strncmpCallBytes[2], sizeof(uint32_t));
-    memcpy(&instructionBufferPtr[43], &noMoreMapNamesAddress, sizeof(noMoreMapNamesAddress));
-    memcpy(&instructionBufferPtr[49], &firstMapNameAddress, sizeof(firstMapNameAddress));
-    memcpy(&instructionBufferPtr[97], &delayOffset, sizeof(delayOffset));
-    memcpy(&instructionBufferPtr[101], ii->sleepCallBytes, sizeof(ii->sleepCallBytes));
-    memcpy(&instructionBufferPtr[113], &ii->loadingFromMenuBytes[2], sizeof(ii->loadingFromMenuBytes) - 2);
-    memcpy(&instructionBufferPtr[119], &backToAmnesiaOffset2, sizeof(backToAmnesiaOffset2));
+    // quickload with delay
+    uint32_t backToAmnesiaOffset1 = (ii->loadingFromMenuLocation + sizeof(ii->loadingFromMenuBytes) - 2) - (mapDelayInstructionsStart + 28);
+
+    // quickload without delay
+    uint32_t backToAmnesiaOffset2 = (ii->loadingFromMenuLocation + sizeof(ii->loadingFromMenuBytes) - 2) - (mapDelayInstructionsStart + 17);
+
+    // load from menu delay
+    uint32_t backToAmnesiaOffset3 = (ii->loadingFromMenuLocation + sizeof(ii->loadingFromMenuBytes) - 2) - (mapDelayInstructionsStart + 133);
+
+    if (ii->quickloadDelay != 0) {
+
+        memcpy(&delayingQuickloadsBytes[1], &DestroyMapCallOffset, sizeof(DestroyMapCallOffset));
+        memcpy(&delayingQuickloadsBytes[6], &ii->quickloadDelay, sizeof(ii->quickloadDelay));
+        memcpy(&delayingQuickloadsBytes[10], ii->sleepCallBytes, sizeof(ii->sleepCallBytes));
+        memcpy(&delayingQuickloadsBytes[16], ii->loadingFromMenuBytes, sizeof(ii->loadingFromMenuBytes));
+        memcpy(&delayingQuickloadsBytes[24], &backToAmnesiaOffset1, sizeof(backToAmnesiaOffset1));
+
+        memcpy(instructionBufferPtr, delayingQuickloadsBytes, sizeof(delayingQuickloadsBytes));
+
+    } else {
+
+        memcpy(&notDelayingQuickloadsBytes[1], &DestroyMapCallOffset, sizeof(DestroyMapCallOffset));
+        memcpy(&notDelayingQuickloadsBytes[5], ii->loadingFromMenuBytes, sizeof(ii->loadingFromMenuBytes));
+        memcpy(&notDelayingQuickloadsBytes[13], &backToAmnesiaOffset2, sizeof(backToAmnesiaOffset2));
+
+        memcpy(instructionBufferPtr, notDelayingQuickloadsBytes, sizeof(notDelayingQuickloadsBytes));
+
+    }
+
+    if (ii->howManyMapNames != 0) {
+
+        memcpy(&instructionBufferPtr[32], &ii->spacePerMapName, sizeof(ii->spacePerMapName));
+        memcpy(&instructionBufferPtr[38], &ii->strncmpCallBytes[2], sizeof(uint32_t));
+        memcpy(&instructionBufferPtr[53], &noMoreMapNamesAddress, sizeof(noMoreMapNamesAddress));
+        memcpy(&instructionBufferPtr[59], &firstMapNameAddress, sizeof(firstMapNameAddress));
+        memcpy(&instructionBufferPtr[107], &delayOffset, sizeof(delayOffset));
+        memcpy(&instructionBufferPtr[111], ii->sleepCallBytes, sizeof(ii->sleepCallBytes));
+        memcpy(&instructionBufferPtr[123], &ii->loadingFromMenuBytes[2], sizeof(ii->loadingFromMenuBytes) - 2);
+        memcpy(&instructionBufferPtr[129], &backToAmnesiaOffset3, sizeof(backToAmnesiaOffset3));
+
+    }
 }
 
 
@@ -1070,7 +1133,7 @@ static bool writeToProcessWithCacheFlush(
         return false;
     }
 
-    if (!FlushInstructionCache(ph->processHandle, (LPCVOID)writeLocation, howManyBytesToWrite)) {
+    if (!FlushInstructionCache(ph->m_processHandle, (LPCVOID)writeLocation, howManyBytesToWrite)) {
         printf(
             "WARNING: Couldn't flush %u bytes in instruction cache starting at memory address 0x%08x (error code %u).\n",
             howManyBytesToWrite,
@@ -1135,12 +1198,12 @@ static bool injectOriginalMemory(
 
     ////////////////// injecting map delay jmps ///////////////////
     uint32_t quickloadInstructionsStart = ii->injectedInstructionsLocation + sizeof(mainMenuDelayInstructions);
-    uint32_t menuLoadInstructionsStart = quickloadInstructionsStart + 18;
+    uint32_t menuLoadInstructionsStart = quickloadInstructionsStart + 28;
 
     uint32_t fromQuickloadOffset = quickloadInstructionsStart - (ii->quickloadingLocation + 5);
     uint32_t fromMenuLoadOffset = menuLoadInstructionsStart - (ii->loadingFromMenuLocation + 5);
 
-    if (ii->howManyMapNames != 0) {
+    if (ii->howManyMapNames != 0) { // in this case, it needs to be injected in both the quickload spot and the menu load spot
         
         memcpy(&jmp[1], &fromQuickloadOffset, sizeof(fromQuickloadOffset));
 
@@ -1151,6 +1214,14 @@ static bool injectOriginalMemory(
         memcpy(&jmp[1], &fromMenuLoadOffset, sizeof(fromMenuLoadOffset));
 
         if (!writeToProcessWithCacheFlush(ph, ii->loadingFromMenuLocation, 5, jmp, terminateAmnesia)) {
+            return false;
+        }
+
+    } else if (ii->quickloadDelay != 0) { // in this case, it only needs to be injected in the quickload spot
+
+        memcpy(&jmp[1], &fromQuickloadOffset, sizeof(fromQuickloadOffset));
+
+        if (!writeToProcessWithCacheFlush(ph, ii->quickloadingLocation, 5, jmp, terminateAmnesia)) {
             return false;
         }
 
@@ -1239,7 +1310,7 @@ static bool injectDataAndInstructions(
         prepareMainMenuDelayInstructions(ii, instructionBuffer);
     }
 
-    if (ii->howManyMapNames != 0) {
+    if (ii->howManyMapNames != 0 || ii->quickloadDelay != 0) {
         prepareMapDelayInstructions(ii, instructionBuffer);
     }
 
@@ -1256,7 +1327,7 @@ static bool injectDataAndInstructions(
     DWORD mandatoryArgument = 0;
 
     if (!VirtualProtectEx(
-        ph->processHandle,
+        ph->m_processHandle,
         (LPVOID)ii->injectedInstructionsLocation,
         ii->spaceForInstructions,
         PAGE_EXECUTE,
@@ -1266,7 +1337,7 @@ static bool injectDataAndInstructions(
         return false;
     }
 
-    NTSTATUS ntFunctionStatus = NtSuspendProcess(ph->processHandle);
+    NTSTATUS ntFunctionStatus = NtSuspendProcess(ph->m_processHandle);
 
     if (!NT_SUCCESS(ntFunctionStatus)) {
         printf("NtSuspendProcess couldn't suspend Amnesia (NTSTATUS code 0x%08x).\n", ntFunctionStatus);
@@ -1277,7 +1348,7 @@ static bool injectDataAndInstructions(
     // do this last in case anything else fails
     bool originalMemoryInjectedSuccessfully = injectOriginalMemory(ph, ii, enableSlipperyPhysics, terminateAmnesia);
 
-    ntFunctionStatus = NtResumeProcess(ph->processHandle);
+    ntFunctionStatus = NtResumeProcess(ph->m_processHandle);
 
     if (!NT_SUCCESS(ntFunctionStatus)) {
         printf("NtResumeProcess couldn't resume Amnesia (NTSTATUS code 0x%08x).\n", ntFunctionStatus);
@@ -1312,7 +1383,7 @@ int main() {
     const wchar_t* amnesiaName = isSteamVersion ? steamName : noSteamName;
     ProcessHelper ph(amnesiaPid, amnesiaName);
 
-    if (ph.textSegmentLocation == 0) {
+    if (ph.m_textSegmentLocation == 0) {
         getExitInput(false);
         return EXIT_FAILURE;
     }
@@ -1323,8 +1394,10 @@ int main() {
     bool allowUnexpectedGameVersions = false;
     bool checkForToolUpdates = false;
     bool allowNotFullyUpdatedTool = false;
+    uint32_t millisecondsMainMenuDelay = 0;
+    uint32_t millisecondsQuickloadDelay = 0;
     double secondsRemainingBeforeUnwait = 0.0;
-    DWORD millisecondsUpdateCheckTimeout = 0;
+    uint32_t millisecondsUpdateCheckTimeout = 0;
 
     if (!readSettingsFile(
         &skippingFlashbacks,
@@ -1333,6 +1406,8 @@ int main() {
         &allowUnexpectedGameVersions,
         &checkForToolUpdates,
         &allowNotFullyUpdatedTool,
+        &millisecondsMainMenuDelay,
+        &millisecondsQuickloadDelay,
         &secondsRemainingBeforeUnwait,
         &millisecondsUpdateCheckTimeout
         )) {
@@ -1341,6 +1416,9 @@ int main() {
     }
 
     ii.skippingFlashBacks = skippingFlashbacks;
+    ii.mainMenuDelay = millisecondsMainMenuDelay;
+    ii.quickloadDelay = millisecondsQuickloadDelay;
+    memcpy(&ii.secondsRemainingBeforeUnwait, &secondsRemainingBeforeUnwait, sizeof(double));
     
     // determining if this version of the tool is the most recent version //
     if (checkForToolUpdates) {
@@ -1366,13 +1444,13 @@ int main() {
     }
     ////////////////////////////////////////////////////////////////////////
     
-    if ((!isSteamVersion && ph.remainingBytesToRead != 6467584) || (isSteamVersion && ph.remainingBytesToRead != 6479872)) {
+    if ((!isSteamVersion && ph.m_remainingBytesToRead != 6467584) || (isSteamVersion && ph.m_remainingBytesToRead != 6479872)) {
         printf(
             "\
 WARNING: %ls's .text segment is %u bytes, but this tool was made for versions which are 6467584 bytes and 6479872 bytes.\n\
 This tool might not work correctly with other versions of the game.\n%s",
             amnesiaName,
-            ph.remainingBytesToRead,
+            ph.m_remainingBytesToRead,
             allowUnexpectedGameVersions ? "" : "To use this tool with other versions of Amnesia, change the \"allow unexpected game versions\" setting to \"y\", \"t\", or \"1\".\n"
         );
         if (!allowUnexpectedGameVersions) {
@@ -1380,8 +1458,6 @@ This tool might not work correctly with other versions of the game.\n%s",
             return EXIT_FAILURE;
         }
     }
-
-    memcpy(&ii.secondsRemainingBeforeUnwait, &secondsRemainingBeforeUnwait, sizeof(double));
 
     uint32_t howManyFlashbackNames = 0;
     uint32_t lengthOfLongestFlashbackName = 0;
@@ -1401,10 +1477,9 @@ This tool might not work correctly with other versions of the game.\n%s",
 
     uint32_t howManyMapNames = 0;
     uint32_t lengthOfLongestMapName = 0;
-    bool delayingMainMenu = false;
 
     if (delayMaps) {
-        if (!preprocessMapDelaysFile(&howManyMapNames, &lengthOfLongestMapName, &delayingMainMenu)) {
+        if (!preprocessMapDelaysFile(&howManyMapNames, &lengthOfLongestMapName)) {
             getExitInput(false);
             return EXIT_FAILURE;
         }
@@ -1445,12 +1520,12 @@ This tool might not work correctly with other versions of the game.\n%s",
     GetSystemInfo(&sysInfo);
     DWORD pageSize = sysInfo.dwPageSize;
 
-    // space for instructions
     static_assert(
         sizeof(flashbackWaitInstructions) >= sizeof(flashbackSkipInstructions),
         "flashback wait instructions are smaller than flashback skip instructions, so update the size calculation here"
     );
 
+    // space for instructions
     uint32_t sizeOfInstructionArea = sizeof(mainMenuDelayInstructions) + sizeof(mapDelayInstructions) + sizeof(flashbackWaitInstructions);
     uint32_t spaceForInstructions = ((sizeOfInstructionArea / pageSize) + ((sizeOfInstructionArea % pageSize) != 0)) * pageSize;
 
@@ -1470,10 +1545,9 @@ This tool might not work correctly with other versions of the game.\n%s",
     ii.spacePerMapName = spacePerMapName;
     ii.sizeOfMapsAndDelaysArea = sizeOfMapsAndDelaysArea;
     ii.spaceForInstructions = spaceForInstructions;
-    ii.delayingMainMenu = delayingMainMenu;
     
     LPVOID extraMemoryPtr = VirtualAllocEx(        // resource acquired
-        ph.processHandle,
+        ph.m_processHandle,
         nullptr,
         totalSpaceNeeded,
         MEM_COMMIT | MEM_RESERVE,
@@ -1486,27 +1560,30 @@ This tool might not work correctly with other versions of the game.\n%s",
         getExitInput(false);
         return false;
     }
+
     ii.injectedInstructionsLocation = (uint32_t)extraMemoryPtr;
     ii.injectedDataLocation = ii.injectedInstructionsLocation + spaceForInstructions;
+
+    printf("Instructions written at address %08x. Data written at address %08x.\n", ii.injectedInstructionsLocation, ii.injectedDataLocation);
 
     // terminate Amnesia if the jmps and calls were written unsafely (partial writes or instruction cache couldn't be flushed).
     bool terminateAmnesia = false;
 
     // preparing ph for writing
-    ph.whereToReadOrWrite = ii.injectedDataLocation;
-    ph.bufferPosition = 0;
+    ph.m_whereToReadOrWrite = ii.injectedDataLocation;
+    ph.m_bufferPosition = 0;
     
     if (!injectDataAndInstructions(&ph, &ii, commonPrefix, enableSlipperyPhysics, &terminateAmnesia, NtSuspendProcess, NtResumeProcess)) {
         DWORD lastErrorCode = GetLastError(); // saving the error from injectDataAndInstructions for TerminateProcess
 
-        if (!VirtualFreeEx(ph.processHandle, extraMemoryPtr, 0, MEM_RELEASE)) { // resource released
+        if (!VirtualFreeEx(ph.m_processHandle, extraMemoryPtr, 0, MEM_RELEASE)) { // resource released
             printf("WARNING: Error when using VirtualFreeEx (error code %u).\nCouldn't release VirtualAllocEx memory.\n", GetLastError());
         }
 
         if (terminateAmnesia) {
             printf("Terminating Amnesia.\n");
             
-            if (!TerminateProcess(ph.processHandle, lastErrorCode)) {
+            if (!TerminateProcess(ph.m_processHandle, lastErrorCode)) {
                 printf(
                     "WARNING: Error when using TerminateProcess to close %ls (error code %u).\nCouldn't close %ls. This session of %ls may crash.\n",
                     amnesiaName,

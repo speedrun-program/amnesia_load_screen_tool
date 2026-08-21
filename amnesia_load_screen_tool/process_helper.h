@@ -6,12 +6,12 @@ class ProcessHelper {
 
 public:
 
-    HANDLE processHandle = nullptr;
-    uint32_t whereToReadOrWrite = 0;
-    uint32_t remainingBytesToRead = 0;
-    uint32_t textSegmentLocation = 0;
-    DWORD bufferPosition = 0;
-    unsigned char buffer[4096] = { 0 };
+    HANDLE m_processHandle = nullptr;
+    uint32_t m_whereToReadOrWrite = 0;
+    uint32_t m_remainingBytesToRead = 0;
+    uint32_t m_textSegmentLocation = 0;
+    DWORD m_bufferPosition = 0;
+    unsigned char m_buffer[4096] = { 0 };
 
     ProcessHelper(const ProcessHelper& fhelper) = delete;
     ProcessHelper& operator=(ProcessHelper other) = delete;
@@ -21,13 +21,13 @@ public:
 
     ProcessHelper(const DWORD pid, const wchar_t* processName) {
 
-        processHandle = OpenProcess(
+        m_processHandle = OpenProcess(
             PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_SUSPEND_RESUME | PROCESS_TERMINATE,
             false,
             pid
         );
 
-        if (processHandle == nullptr) {
+        if (m_processHandle == nullptr) {
             printf("ProcessHelper couldn't get process handle for %ls with PID %u (error code %u).\n", processName, pid, GetLastError());
             return;
         }
@@ -44,16 +44,16 @@ public:
 
     ~ProcessHelper() {
 
-        if (processHandle != nullptr) {
-            CloseHandle(processHandle);
+        if (m_processHandle != nullptr) {
+            CloseHandle(m_processHandle);
         }
     }
 
 
     bool checkIfProcessIsCorrect(const wchar_t* processName) const {
 
-        if (processHandle == nullptr) {
-            printf("ProcessHelper error: HANDLE processHandle was NULL.\n");
+        if (m_processHandle == nullptr) {
+            printf("ProcessHelper error: HANDLE m_processHandle was NULL.\n");
 
             return false;
         }
@@ -62,7 +62,7 @@ public:
 
         DWORD charactersWritten = (sizeof(filepathBuffer) / sizeof(wchar_t)) - 1; // - 1 so there's always a L'\0' at the end
         DWORD queryFullProcessImageNameResult = QueryFullProcessImageName(
-            processHandle,
+            m_processHandle,
             PROCESS_NAME_NATIVE,
             filepathBuffer,
             &charactersWritten
@@ -94,8 +94,8 @@ public:
 
     bool findTextSegmentLocation(const wchar_t* processName) {
 
-        if (processHandle == nullptr) {
-            printf("ProcessHelper error: HANDLE processHandle was NULL.\n");
+        if (m_processHandle == nullptr) {
+            printf("ProcessHelper error: HANDLE m_processHandle was NULL.\n");
 
             return false;
         }
@@ -106,7 +106,7 @@ public:
         uint32_t queryAddress = 0;
         MEMORY_BASIC_INFORMATION mbi = { 0 };
 
-        if (VirtualQueryEx(processHandle, (LPCVOID)queryAddress, &mbi, sizeof(mbi)) == 0) { // checking if VirtualQueryEx works
+        if (VirtualQueryEx(m_processHandle, (LPCVOID)queryAddress, &mbi, sizeof(mbi)) == 0) { // checking if VirtualQueryEx works
             printf("Error when using VirtualQueryEx (error code %u).\n", GetLastError());
             return false;
         }
@@ -115,9 +115,9 @@ public:
         DWORD charactersWritten = 0;
         bool foundExeArea = false;
 
-        for (queryAddress += mbi.RegionSize; VirtualQueryEx(processHandle, (LPCVOID)queryAddress, &mbi, sizeof(mbi)) != 0; queryAddress += mbi.RegionSize) {
+        for (queryAddress += mbi.RegionSize; VirtualQueryEx(m_processHandle, (LPCVOID)queryAddress, &mbi, sizeof(mbi)) != 0; queryAddress += mbi.RegionSize) {
             DWORD charactersWritten = GetMappedFileName(
-                processHandle,
+                m_processHandle,
                 (LPVOID)queryAddress,
                 filepathBuffer,
                 (sizeof(filepathBuffer) / sizeof(wchar_t)) - 1 // - 1 so there's always a L'\0' at the end
@@ -145,19 +145,19 @@ public:
         // finding the .text area
         do {
             if (mbi.Protect == PAGE_EXECUTE_READ) {
-                remainingBytesToRead = mbi.RegionSize;
-                whereToReadOrWrite = queryAddress;
+                m_remainingBytesToRead = mbi.RegionSize;
+                m_whereToReadOrWrite = queryAddress;
 
                 if (!refillBuffer()) {
                     return false; // first read failed
                 }
 
-                textSegmentLocation = queryAddress; // do this last to indicate successful initialization
+                m_textSegmentLocation = queryAddress; // do this last to indicate successful initialization
                 return true;
             }
 
             charactersWritten = GetMappedFileName(
-                processHandle,
+                m_processHandle,
                 (LPVOID)queryAddress,
                 filepathBuffer,
                 (sizeof(filepathBuffer) / sizeof(wchar_t)) - 1 // - 1 so there's always a L'\0' at the end
@@ -169,7 +169,7 @@ public:
             }
 
             queryAddress += mbi.RegionSize;
-        } while (VirtualQueryEx(processHandle, (LPCVOID)queryAddress, &mbi, sizeof(mbi)) != 0);
+        } while (VirtualQueryEx(m_processHandle, (LPCVOID)queryAddress, &mbi, sizeof(mbi)) != 0);
 
         printf("Couldn't find .text memory area in the executable's memory area.\n");
         return false;
@@ -178,31 +178,31 @@ public:
 
     bool refillBuffer() const {
 
-        if (processHandle == nullptr) {
-            printf("ProcessHelper error: HANDLE processHandle was NULL.\n");
+        if (m_processHandle == nullptr) {
+            printf("ProcessHelper error: HANDLE m_processHandle was NULL.\n");
 
             return false;
         }
 
-        uint32_t bytesToRead = (remainingBytesToRead >= sizeof(buffer)) ? sizeof(buffer) : remainingBytesToRead;
+        uint32_t bytesToRead = (m_remainingBytesToRead >= sizeof(m_buffer)) ? sizeof(m_buffer) : m_remainingBytesToRead;
         uint32_t bytesReadSoFar = 0;
 
         while (bytesReadSoFar < bytesToRead) {
             SIZE_T bytesReadOnCurrentCall = 0;
 
             bool readSucceeded = ReadProcessMemory(
-                processHandle,
-                (LPCVOID)whereToReadOrWrite,
-                (LPVOID)(&buffer[bytesReadSoFar]),
+                m_processHandle,
+                (LPCVOID)m_whereToReadOrWrite,
+                (LPVOID)(&m_buffer[bytesReadSoFar]),
                 bytesToRead - bytesReadSoFar,
                 &bytesReadOnCurrentCall
             );
             if (bytesReadOnCurrentCall == 0) {
-                printf("ReadProcessMemory couldn't read any bytes starting at memory address: 0x%x.\n", whereToReadOrWrite);
+                printf("ReadProcessMemory couldn't read any bytes starting at memory address: 0x%x.\n", m_whereToReadOrWrite);
                 return false;
             }
             if (!readSucceeded) {
-                printf("ReadProcessMemory error %u at memory address: 0x%x.\n", GetLastError(), whereToReadOrWrite);
+                printf("ReadProcessMemory error %u at memory address: 0x%x.\n", GetLastError(), m_whereToReadOrWrite);
                 return false;
             }
 
@@ -215,28 +215,28 @@ public:
 
     bool getByte(unsigned char* b) {
 
-        if (processHandle == nullptr) {
-            printf("ProcessHelper error: HANDLE processHandle was NULL.\n");
+        if (m_processHandle == nullptr) {
+            printf("ProcessHelper error: HANDLE m_processHandle was NULL.\n");
 
             return false;
         }
 
-        if (remainingBytesToRead == 0) {
+        if (m_remainingBytesToRead == 0) {
             return false;
         }
 
-        if (bufferPosition == sizeof(buffer)) {
-            bufferPosition = 0;
-            whereToReadOrWrite += sizeof(buffer);
+        if (m_bufferPosition == sizeof(m_buffer)) {
+            m_bufferPosition = 0;
+            m_whereToReadOrWrite += sizeof(m_buffer);
 
             if (!refillBuffer()) {
                 return false;
             }
         }
 
-        *b = buffer[bufferPosition];
-        bufferPosition += 1;
-        remainingBytesToRead -= 1;
+        *b = m_buffer[m_bufferPosition];
+        m_bufferPosition += 1;
+        m_remainingBytesToRead -= 1;
 
         return true;
     }
@@ -244,8 +244,8 @@ public:
 
     uint32_t writeToProcess(const uint32_t writeLocation, const unsigned char* src, const uint32_t howManyBytesToWrite) const {
 
-        if (processHandle == nullptr) {
-            printf("ProcessHelper error: HANDLE processHandle was NULL.\n");
+        if (m_processHandle == nullptr) {
+            printf("ProcessHelper error: HANDLE m_processHandle was NULL.\n");
 
             return false;
         }
@@ -256,7 +256,7 @@ public:
             SIZE_T bytesWrittenOnCurrentCall = 0;
 
             bool writeSucceeded = WriteProcessMemory(
-                processHandle,
+                m_processHandle,
                 (LPVOID)writeLocation,
                 (LPCVOID)(&src[totalBytesWritten]),
                 howManyBytesToWrite - totalBytesWritten,
@@ -288,24 +288,24 @@ public:
 
     bool writeByte(const unsigned char b) {
 
-        if (processHandle == nullptr) {
-            printf("ProcessHelper error: HANDLE processHandle was NULL.\n");
+        if (m_processHandle == nullptr) {
+            printf("ProcessHelper error: HANDLE m_processHandle was NULL.\n");
 
             return false;
         }
 
-        if (bufferPosition == sizeof(buffer)) {
-            bufferPosition = 0;
+        if (m_bufferPosition == sizeof(m_buffer)) {
+            m_bufferPosition = 0;
 
-            if (writeToProcess(whereToReadOrWrite, buffer, sizeof(buffer)) != sizeof(buffer)) {
+            if (writeToProcess(m_whereToReadOrWrite, m_buffer, sizeof(m_buffer)) != sizeof(m_buffer)) {
                 return false;
             }
 
-            whereToReadOrWrite += sizeof(buffer);
+            m_whereToReadOrWrite += sizeof(m_buffer);
         }
 
-        buffer[bufferPosition] = b;
-        bufferPosition += 1;
+        m_buffer[m_bufferPosition] = b;
+        m_bufferPosition += 1;
 
         return true;
     }
@@ -313,14 +313,14 @@ public:
 
     bool flushBuffer() {
 
-        if (processHandle == nullptr) {
-            printf("ProcessHelper error: HANDLE processHandle was NULL.\n");
+        if (m_processHandle == nullptr) {
+            printf("ProcessHelper error: HANDLE m_processHandle was NULL.\n");
 
             return false;
         }
 
-        bool bufferFlushedSuccessfully = writeToProcess(whereToReadOrWrite, buffer, bufferPosition) == bufferPosition;
-        bufferPosition = 0;
+        bool bufferFlushedSuccessfully = writeToProcess(m_whereToReadOrWrite, m_buffer, m_bufferPosition) == m_bufferPosition;
+        m_bufferPosition = 0;
 
         return bufferFlushedSuccessfully;
     }
