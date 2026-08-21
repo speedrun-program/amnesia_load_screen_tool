@@ -6,7 +6,7 @@
 13_machine_room/       1000
 15_prison_south/       1000
 15_prison_north/       1000
-16_cistern_entrance/   2000
+16_cistern_entrance/   2500
 19_morgue/             1000
 23_torture_transept/   1000
 29_orb_chamber/        1000

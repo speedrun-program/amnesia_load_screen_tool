@@ -1,8 +1,10 @@
 skip flashbacks: n
-delay maps: n
+delay maps: y
 enable consistent slippery physics: y
 allow unexpected game versions: n
 check for tool updates: y
 allow not fully updated tool: n
+milliseconds main menu delay: 0
+milliseconds quickload delay: 0
 milliseconds remaining before unwait: 435
 milliseconds update check timeout: 5000

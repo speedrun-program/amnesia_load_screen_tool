@@ -46,17 +46,13 @@ how to turn off consistent slippery physics:
 ---------------------------------------------------------------------------------------------------
 how to adjust load delays or add or remove maps in maps_and_delays.txt:
 ---------------------------------------------------------------------------------------------------
-- at the start of the line, write the map name followed by a forward slash. leading or trailing whitespace will be included.
+- at the start of the line, write the map name followed by a forward slash.
+  avoid leading and trailing whitespace around the map name, because that will be seen as part of the name.
 
 - after the forward slash, put the delay in milliseconds.
 
-- if there's no text before the forward slash, the delay is used for the main menu
-
-- example 1: "12_storage/ 1575"
+- example: "12_storage/ 1575"
   this will give the loads from main menu for the Storage map a delay of 1575 milliseconds.
-  
-  example 2: "/ 1000"
-  this will give loads for the main menu when exiting the game a delay of 1000 milliseconds.
 
 
 ---------------------------------------------------------------------------------------------------
@@ -69,6 +65,21 @@ how to add more flashbacks:
 - in English, the sound files are in \Amnesia The Dark Descent\lang\eng\voices\flashbacks.
   in Russian, the sound files are in \Amnesia The Dark Descent\lang\rus\voices\flashbacks.
   you can listen to them to check if they're the ones you want to skip.
+
+
+---------------------------------------------------------------------------------------------------
+how to add a delay to the main menu load time:
+---------------------------------------------------------------------------------------------------
+- in amnesia_settings.txt, adjust the "milliseconds main menu delay" setting.
+
+
+---------------------------------------------------------------------------------------------------
+how to add a delay to quickload load times:
+---------------------------------------------------------------------------------------------------
+- in amnesia_settings.txt, adjust the "milliseconds quickload delay" setting.
+
+- this only adds a delay to quickloads when there hasn't been any saves since last being in the main menu.
+  fortunately, this is the only type of quickload that's used in individual level runs.
 
 
 ---------------------------------------------------------------------------------------------------
