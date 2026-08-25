@@ -625,6 +625,7 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
             memorySlice.copyBytes(locationCopyBytes, 21, sizeof(locationCopyBytes));
             memcpy(&ii->getStepSizeLocation, locationCopyBytes, sizeof(ii->getStepSizeLocation));
             ii->getStepSizeLocation += ii->engineRunLocation + 5;
+            instructionPatternsFound += 1;
 
         } else if (memorySlice[0] == 0x8b && memorySlice[1] == 0x46 && memorySlice[3] == 0x8b && memorySlice[4] == 0x10 && memorySlice[5] == 0x3b && memorySlice[6] == 0xd0) {
 
@@ -719,6 +720,7 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
 
             uint32_t slipperyPhysicsLocation = currentMemoryAddress + 7;
             memcpy(&ii->slipperyPhysicsLocation, &slipperyPhysicsLocation, sizeof(ii->slipperyPhysicsLocation));
+            instructionPatternsFound += 1;
 
         }
     }
@@ -728,7 +730,7 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
 
         return false;
     }
-    if (instructionPatternsFound > 12) {
+    if (instructionPatternsFound > 13) {
         printf("Duplicate instruction patterns were found.\n");
 
         return false;
