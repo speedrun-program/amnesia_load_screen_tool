@@ -1196,7 +1196,7 @@ static bool injectOriginalMemory(
     }
     ///////////////////////////////////////////////////////////////
 
-    ////////////////// injecting map delay jmps ///////////////////
+    ////////// injecting map and/or quickload delay jmps //////////
     uint32_t quickloadInstructionsStart = ii->injectedInstructionsLocation + sizeof(mainMenuDelayInstructions);
     uint32_t menuLoadInstructionsStart = quickloadInstructionsStart + 28;
 
@@ -1228,7 +1228,7 @@ static bool injectOriginalMemory(
     }
     ///////////////////////////////////////////////////////////////
 
-    ///// injecting flashback skip or flashback wait call(s) //////
+    ////// injecting flashback skip or flashback wait calls ///////
     if (ii->howManyFlashbackNames != 0) {
 
         if (ii->skippingFlashBacks) {
