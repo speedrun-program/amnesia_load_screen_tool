@@ -1,5 +1,5 @@
 skip flashbacks: n
-delay maps: y
+delay maps: n
 enable consistent slippery physics: y
 allow unexpected game versions: n
 check for tool updates: y
