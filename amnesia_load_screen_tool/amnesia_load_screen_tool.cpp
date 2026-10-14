@@ -109,22 +109,18 @@ public:
     // NOTE: max copy size is 255 bytes, not 256, since howManyBytes max size is 255
     void copyBytes(unsigned char* destination, const uint8_t startIdx, const uint8_t howManyBytes) const {
 
-        bool printIt = false;
+        bool printAtEnd = false;
 
         for (uint8_t i = 0; i < howManyBytes; i++) {
             destination[i] = m_buffer[(uint8_t)(m_start + i + startIdx)];
             if (m_start + i + startIdx >= 250) {
-                printIt = true;
-                printf("%u (%u): %02x\n",
-                    m_start + i + startIdx,
-                    (uint8_t)(m_start + i + startIdx),
-                    destination[i]
-                );
+                printAtEnd = true;
+                printf("test: %02x\n", m_buffer[m_start + i + startIdx]);
             }
         }
 
-        if (printIt) {
-            // printf("destination: %02x %02x %02x %02x\n", destination[0], destination[1], destination[2], destination[3]);
+        if (printAtEnd) {
+            printf("m_start: %02x\n", m_start);
         }
     }
 };
@@ -603,6 +599,8 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
     unsigned char locationCopyBytes[sizeof(uint32_t)] = { 0 };
     Circular256ByteBuffer memorySlice;
 
+    // filling 255 bytes, then the 256th byte gets added in the first iteration of the next loop,
+    // that way the buffer is full and currentMemoryAddress is the byte at memorySlice[0]
     for (size_t i = 0; i < sizeof(memorySlice.m_buffer) - 1; i++) {
         ph->getByte(&b);
         memorySlice.addToEnd(b);
