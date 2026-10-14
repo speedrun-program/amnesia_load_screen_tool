@@ -115,7 +115,7 @@ public:
             destination[i] = m_buffer[(uint8_t)(m_start + i + startIdx)];
             if (m_start + i + startIdx >= 250) {
                 printAtEnd = true;
-                printf("test: %02x\n", m_buffer[m_start + i + startIdx]);
+                printf("test: %02x\n", m_buffer[(uint8_t)(m_start + i + startIdx)]);
             }
         }
 
