@@ -603,7 +603,7 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
     unsigned char locationCopyBytes[sizeof(uint32_t)] = { 0 };
     Circular256ByteBuffer memorySlice;
 
-    for (size_t i = 0; i < sizeof(memorySlice.m_buffer) - 1; i++) {
+    for (size_t i = 0; i < sizeof(memorySlice.m_buffer); i++) {
         ph->getByte(&b);
         memorySlice.addToEnd(b);
     }
