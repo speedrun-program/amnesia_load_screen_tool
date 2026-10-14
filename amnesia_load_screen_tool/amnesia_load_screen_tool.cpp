@@ -34,7 +34,7 @@ struct InjectionInfo {
     uint32_t cSoundEntryStopLocation = 0;
     uint32_t beforeFadeOutAllLocation = 0; // jump location
     uint32_t engineRunLocation = 0;        // jump location
-    uint32_t getStepSizeLocation = 0;
+    uint32_t runMessageLocation = 0;
     uint32_t altf4QuitLocation = 0;        // jump location
     uint32_t noSaveQuitLocation = 0;       // jump location
     uint32_t saveQuitLocation = 0;         // jump location
@@ -88,34 +88,43 @@ struct InjectionInfo {
 };
 
 
-template <const size_t circularBufferSize>
-class CircularBuffer {
+class Circular256ByteBuffer {
 
 public:
 
-    static_assert(
-        circularBufferSize && ((circularBufferSize & (circularBufferSize - 1)) == 0),
-        "circularBufferSize needs to be a power of two and greater than zero.\n"
-        );
+    unsigned char m_buffer[256] = { 0 };
+    uint8_t m_start = 0;
 
-    unsigned char buffer[circularBufferSize] = { 0 };
-    size_t start = 0;
+    unsigned char operator[](const uint8_t idx) const {
 
-    unsigned char operator[](const size_t idx) const {
-
-        return buffer[(idx + start) & (sizeof(buffer) - 1)];
+        return m_buffer[(uint8_t)(idx + m_start)];
     }
 
     void addToEnd(const unsigned char newEndValue) {
 
-        buffer[start] = newEndValue;
-        start = (start + 1) & (sizeof(buffer) - 1);
+        m_buffer[m_start] = newEndValue;
+        m_start += 1;
     }
 
-    void copyBytes(unsigned char* destination, const size_t startIdx, const size_t howManyBytes) const {
+    // NOTE: max copy size is 255 bytes, not 256, since howManyBytes max size is 255
+    void copyBytes(unsigned char* destination, const uint8_t startIdx, const uint8_t howManyBytes) const {
 
-        for (size_t i = 0; i < howManyBytes; i++) {
-            destination[i] = buffer[(start + i + startIdx) & (sizeof(buffer) - 1)];
+        bool printIt = false;
+
+        for (uint8_t i = 0; i < howManyBytes; i++) {
+            destination[i] = m_buffer[(uint8_t)(m_start + i + startIdx)];
+            if (m_start + i + startIdx >= 250) {
+                printIt = true;
+                printf("%u (%u): %02x\n",
+                    m_start + i + startIdx,
+                    (uint8_t)(m_start + i + startIdx),
+                    destination[i]
+                );
+            }
+        }
+
+        if (printIt) {
+            // printf("destination: %02x %02x %02x %02x\n", destination[0], destination[1], destination[2], destination[3]);
         }
     }
 };
@@ -592,19 +601,20 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
     bool alreadyInjected = false;
     size_t instructionPatternsFound = 0;
     unsigned char locationCopyBytes[sizeof(uint32_t)] = { 0 };
-    CircularBuffer<128> memorySlice;
+    Circular256ByteBuffer memorySlice;
 
-    for (size_t i = sizeof(memorySlice.buffer) - 1; i != 0; i--) {
+    for (size_t i = 0; i < sizeof(memorySlice.m_buffer) - 1; i++) {
         ph->getByte(&b);
         memorySlice.addToEnd(b);
     }
-
+    printf("first address: %08x\nlast address: %08x\n\n", ph->m_textSegmentLocation, ph->m_textSegmentLocation + ph->m_remainingBytesToRead);
     // finding where to write to and copy from in amnesia's memory based on instruction byte patterns
     for (size_t currentMemoryAddress = ph->m_textSegmentLocation; ph->getByte(&b); currentMemoryAddress++) {
         memorySlice.addToEnd(b);
 
         if (memorySlice[0] == 0x8b && memorySlice[1] == 0x88 && memorySlice[6] == 0xe8 && memorySlice[11] == 0x8b && memorySlice[14] == 0x51) {
-
+            printf("FOUND1: %08x -> ", currentMemoryAddress);
+            for (int i = 0; i < 16; i++) printf("%02x ", memorySlice[i]); printf("\n");
             if (memorySlice[26] == 0xe8 || memorySlice[26] == 0xe9) { // call or jmp
                 alreadyInjected = true;
                 break;
@@ -617,66 +627,94 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
             memcpy(&ii->gpBaseLocation, locationCopyBytes, sizeof(ii->gpBaseLocation));
             ii->gpBaseMpSoundOffset = memorySlice[42];
             ii->mpSoundHandlerOffset = memorySlice[45];
+
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0xd9 && memorySlice[4] == 0x8b && memorySlice[10] == 0x6a && memorySlice[11] == 0x05) {
+        } else if (memorySlice[0] == 0xd9 && memorySlice[1] == 0x45 && memorySlice[4] == 0x8b && memorySlice[10] == 0x6a && memorySlice[11] == 0x05) {
+            printf("FOUND2: %08x -> ", currentMemoryAddress);
+            for (int i = 0; i < 16; i++) printf("%02x ", memorySlice[40 + i]); printf("\n");
+            if (memorySlice[40] == 0xe9) { // jmp
+                alreadyInjected = true;
+                break;
+            }
+            
+            printf("memorySlice.start: %u\n", memorySlice.m_start);
+            ii->engineRunLocation = currentMemoryAddress + 40;
+            printf("%02x %02x %02x %02x %02x\n", memorySlice[40], memorySlice[41], memorySlice[42], memorySlice[43], memorySlice[44]);
+            memorySlice.copyBytes(locationCopyBytes, 41, sizeof(locationCopyBytes));
+            printf("%02x %02x %02x %02x\n", (int)locationCopyBytes[0], (int)locationCopyBytes[1], (int)locationCopyBytes[2], (int)locationCopyBytes[3]);
+            memcpy(&ii->runMessageLocation, locationCopyBytes, sizeof(ii->runMessageLocation));
+            printf("runMessageLocation: %08x\n", ii->runMessageLocation);
+            ii->runMessageLocation += ii->engineRunLocation + 5;
+            printf("runMessageLocation: %08x\n", ii->runMessageLocation);
 
-            ii->engineRunLocation = currentMemoryAddress + 20;
-            memorySlice.copyBytes(locationCopyBytes, 21, sizeof(locationCopyBytes));
-            memcpy(&ii->getStepSizeLocation, locationCopyBytes, sizeof(ii->getStepSizeLocation));
-            ii->getStepSizeLocation += ii->engineRunLocation + 5;
             instructionPatternsFound += 1;
 
         } else if (memorySlice[0] == 0x8b && memorySlice[1] == 0x46 && memorySlice[3] == 0x8b && memorySlice[4] == 0x10 && memorySlice[5] == 0x3b && memorySlice[6] == 0xd0) {
-
+            printf("FOUND3: %08x -> ", currentMemoryAddress);
+            for (int i = 0; i < 16; i++) printf("%02x ", memorySlice[i]); printf("\n");
             ii->m_lstSoundEntriesOffset = memorySlice[2];
             ii->nodeCSoundEntryOffset = memorySlice[19];
+
             instructionPatternsFound += 1;
 
         } else if (memorySlice[0] == 0x56 && memorySlice[1] == 0x8b && memorySlice[7] == 0x75 && memorySlice[9] == 0x80) {
-
+            printf("FOUND4: %08x -> ", currentMemoryAddress);
+            for (int i = 0; i < 16; i++) printf("%02x ", memorySlice[i]); printf("\n");
             uint32_t cSoundEntryStopLocation = currentMemoryAddress;
             memcpy(&ii->cSoundEntryStopLocation, &cSoundEntryStopLocation, sizeof(ii->cSoundEntryStopLocation));
             ii->soundChannelOffset = memorySlice[17];
+
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0xd8 && memorySlice[1] == 0x80 && memorySlice[10] == 0x80) {
-            
-            ii->isPlayingOffset = memorySlice[37];
-            ii->getPausedOffset = memorySlice[49];
-            ii->getLoopingOffset = memorySlice[68];
+        } else if (memorySlice[0] == 0xdd && memorySlice[1] == 0xd8 && memorySlice[2] == 0x80 && memorySlice[11] == 0x80) {
+            printf("FOUND5: %08x -> ", currentMemoryAddress);
+            for (int i = 0; i < 16; i++) printf("%02x ", memorySlice[i]); printf("\n");
+            ii->isPlayingOffset = memorySlice[38];
+            ii->getPausedOffset = memorySlice[50];
+            ii->getLoopingOffset = memorySlice[69];
+
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0x05 && memorySlice[5] == 0x8b && memorySlice[12] == 0x17) {
+        } else if (memorySlice[0] == 0xd9 && memorySlice[1] == 0x05 && memorySlice[6] == 0x8b && memorySlice[13] == 0x17) {
+            printf("FOUND6: %08x -> ", currentMemoryAddress);
+            for (int i = 0; i < 16; i++) printf("%02x ", memorySlice[i]); printf("\n");
+            ii->getTotalTimeOffset = memorySlice[29];
+            ii->getElapsedTimeOffset = memorySlice[56];
 
-            ii->getTotalTimeOffset = memorySlice[28];
-            ii->getElapsedTimeOffset = memorySlice[55];
             instructionPatternsFound += 1;
             
         } else if (memorySlice[0] == 0x6a && memorySlice[1] == 0x0a && memorySlice[2] == 0xff && memorySlice[8] == 0x8b) {
-            
+            printf("FOUND7: %08x -> ", currentMemoryAddress);
+            for (int i = 0; i < 16; i++) printf("%02x ", memorySlice[i]); printf("\n");
             memorySlice.copyBytes(ii->sleepCallBytes, 2, sizeof(ii->sleepCallBytes));
+
             instructionPatternsFound += 1;
 
         } else if (memorySlice[0] == 0x6a && memorySlice[1] == 0x05 && memorySlice[7] == 0x53) {
-            
+            printf("FOUND8: %08x -> ", currentMemoryAddress);
+            for (int i = 0; i < 16; i++) printf("%02x ", memorySlice[i]); printf("\n");
             memorySlice.copyBytes(ii->strncmpCallBytes, 8, sizeof(ii->strncmpCallBytes));
+
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0x46 && memorySlice[2] == 0x53 && memorySlice[3] == 0x50 && memorySlice[4] == 0x8b && memorySlice[6] == 0xe8) {
-            
-            if (memorySlice[73] == 0xe8) { // call
+        } else if (memorySlice[0] == 0x8b && memorySlice[1] == 0x46 && memorySlice[3] == 0x53 && memorySlice[4] == 0x50 && memorySlice[5] == 0x8b && memorySlice[7] == 0xe8) {
+            printf("FOUND9: %08x -> ", currentMemoryAddress);
+            for (int i = 0; i < 16; i++) printf("%02x ", memorySlice[i]); printf("\n");
+            if (memorySlice[74] == 0xe8) { // call
                 alreadyInjected = true;
                 break;
             }
 
-            uint32_t altf4QuitLocation = currentMemoryAddress + 73;
+            uint32_t altf4QuitLocation = currentMemoryAddress + 74;
             memcpy(&ii->altf4QuitLocation, &altf4QuitLocation, sizeof(ii->altf4QuitLocation));
-            memorySlice.copyBytes(ii->altf4QuitBytes, 73, sizeof(ii->altf4QuitBytes));
+            memorySlice.copyBytes(ii->altf4QuitBytes, 74, sizeof(ii->altf4QuitBytes));
+
             instructionPatternsFound += 1;
 
         } else if (memorySlice[0] == 0x75 && memorySlice[2] == 0x8b && memorySlice[3] == 0xcf && memorySlice[9] == 0x68) {
-            
+            printf("FOUND10: %08x -> ", currentMemoryAddress);
+            for (int i = 0; i < 16; i++) printf("%02x ", memorySlice[i]); printf("\n");
             if (memorySlice[30] == 0xe8) { // call
                 alreadyInjected = true;
                 break;
@@ -685,10 +723,12 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
             uint32_t noSaveQuitLocation = currentMemoryAddress + 30;
             memcpy(&ii->noSaveQuitLocation, &noSaveQuitLocation, sizeof(ii->noSaveQuitLocation));
             memorySlice.copyBytes(ii->noSaveQuitBytes, 30, sizeof(ii->noSaveQuitBytes));
+
             instructionPatternsFound += 1;
 
         } else if (memorySlice[0] == 0x8b && memorySlice[1] == 0x8a && memorySlice[11] == 0x68) {
-            
+            printf("FOUND11: %08x -> ", currentMemoryAddress);
+            for (int i = 0; i < 16; i++) printf("%02x ", memorySlice[i]); printf("\n");
             if (memorySlice[32] == 0xe8) { // call
                 alreadyInjected = true;
                 break;
@@ -697,10 +737,12 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
             uint32_t saveQuitLocation = currentMemoryAddress + 32;
             memcpy(&ii->saveQuitLocation, &saveQuitLocation, sizeof(ii->saveQuitLocation));
             memorySlice.copyBytes(ii->saveQuitBytes, 32, sizeof(ii->saveQuitBytes));
+
             instructionPatternsFound += 1;
 
         } else if (memorySlice[0] == 0x53 && memorySlice[1] == 0x68 && memorySlice[6] == 0xe8 && memorySlice[14] == 0x85) {
-            
+            printf("FOUND12: %08x -> ", currentMemoryAddress);
+            for (int i = 0; i < 16; i++) printf("%02x ", memorySlice[i]); printf("\n");
             if (memorySlice[33] == 0xe9) { // jmp
                 alreadyInjected = true;
                 break;
@@ -714,12 +756,15 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
             memorySlice.copyBytes(locationCopyBytes, 34, sizeof(locationCopyBytes));
             memcpy(&ii->DestroyMapLocation, locationCopyBytes, sizeof(ii->DestroyMapLocation));
             ii->DestroyMapLocation += currentMemoryAddress + 38;
+
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0x9a && memorySlice[5] == 0x8b && memorySlice[6] == 0x07) {
-
-            uint32_t slipperyPhysicsLocation = currentMemoryAddress + 7;
+        } else if (memorySlice[0] == 0x89 && memorySlice[1] == 0x9a && memorySlice[6] == 0x8b && memorySlice[7] == 0x07) {
+            printf("FOUND13: %08x -> ", currentMemoryAddress);
+            for (int i = 0; i < 16; i++) printf("%02x ", memorySlice[i]); printf("\n");
+            uint32_t slipperyPhysicsLocation = currentMemoryAddress + 8;
             memcpy(&ii->slipperyPhysicsLocation, &slipperyPhysicsLocation, sizeof(ii->slipperyPhysicsLocation));
+
             instructionPatternsFound += 1;
 
         }
@@ -1083,35 +1128,39 @@ static void prepareFlashbackWaitInstructions(const InjectionInfo* ii, unsigned c
     uint32_t secondsRemainingBeforeUnwaitAddress = firstFlashbackNameAddress - sizeof(double);
     uint32_t waitForFlashbackByteLocation = secondsRemainingBeforeUnwaitAddress - 1;
     uint32_t noMoreFlashbackNamesAddress = firstFlashbackNameAddress + (ii->spacePerFlashbackName * ii->howManyFlashbackNames);
-    uint32_t getStepSizeOffset = ii->getStepSizeLocation - (flashbackWaitInstructionsStart + 21);
+    uint32_t runMessageLocationOffset = ii->runMessageLocation - (flashbackWaitInstructionsStart + 37);
+    uint32_t backToAmnesiaNoWaitOffset = (ii->engineRunLocation + 5) - (flashbackWaitInstructionsStart + 51);
+    uint32_t backToAmnesiaWithWaitOffset = (ii->engineRunLocation + 5) - (flashbackWaitInstructionsStart + 339);
 
     memcpy(&instructionBufferPtr[4], &waitForFlashbackByteLocation, sizeof(waitForFlashbackByteLocation));
     memcpy(&instructionBufferPtr[8], ii->beforeFadeOutAllBytes, sizeof(ii->beforeFadeOutAllBytes));
-    memcpy(&instructionBufferPtr[17], &getStepSizeOffset, sizeof(getStepSizeOffset));
-    memcpy(&instructionBufferPtr[22], &waitForFlashbackByteLocation, sizeof(waitForFlashbackByteLocation));
-    memcpy(&instructionBufferPtr[41], &waitForFlashbackByteLocation, sizeof(waitForFlashbackByteLocation));
-    memcpy(&instructionBufferPtr[46], &ii->gpBaseLocation, sizeof(ii->gpBaseLocation));
-    instructionBufferPtr[54] = ii->gpBaseMpSoundOffset;
-    instructionBufferPtr[57] = ii->mpSoundHandlerOffset;
-    instructionBufferPtr[60] = ii->m_lstSoundEntriesOffset;
-    memcpy(&instructionBufferPtr[74], &ii->strncmpCallBytes[2], sizeof(uint32_t));
-    instructionBufferPtr[86] = ii->nodeCSoundEntryOffset;
-    memcpy(&instructionBufferPtr[107], &ii->spacePerFlashbackName, sizeof(ii->spacePerFlashbackName));
-    memcpy(&instructionBufferPtr[113], &ii->lengthOfCommonPrefix, sizeof(ii->lengthOfCommonPrefix));
-    memcpy(&instructionBufferPtr[119], &commonPrefixAddress, sizeof(commonPrefixAddress));
-    memcpy(&instructionBufferPtr[131], &ii->lengthOfCommonPrefix, sizeof(ii->lengthOfCommonPrefix));
-    memcpy(&instructionBufferPtr[136], &firstFlashbackNameAddress, sizeof(firstFlashbackNameAddress));
-    memcpy(&instructionBufferPtr[147], &noMoreFlashbackNamesAddress, sizeof(noMoreFlashbackNamesAddress));
-    instructionBufferPtr[182] = ii->soundChannelOffset;
-    instructionBufferPtr[193] = ii->getPausedOffset;
-    instructionBufferPtr[196] = ii->getLoopingOffset;
-    instructionBufferPtr[201] = ii->isPlayingOffset;
-    instructionBufferPtr[210] = ii->getElapsedTimeOffset;
-    instructionBufferPtr[219] = ii->getTotalTimeOffset;
-    memcpy(&instructionBufferPtr[247], &ii->spacePerFlashbackName, sizeof(ii->spacePerFlashbackName));
-    memcpy(&instructionBufferPtr[254], &noMoreFlashbackNamesAddress, sizeof(noMoreFlashbackNamesAddress));
-    memcpy(&instructionBufferPtr[278], &secondsRemainingBeforeUnwaitAddress, sizeof(secondsRemainingBeforeUnwaitAddress));
-    memcpy(&instructionBufferPtr[290], &ii->sleepCallBytes, sizeof(ii->sleepCallBytes));
+    memcpy(&instructionBufferPtr[33], &runMessageLocationOffset, sizeof(runMessageLocationOffset));
+    memcpy(&instructionBufferPtr[38], &waitForFlashbackByteLocation, sizeof(waitForFlashbackByteLocation));
+    memcpy(&instructionBufferPtr[47], &backToAmnesiaNoWaitOffset, sizeof(backToAmnesiaNoWaitOffset));
+    memcpy(&instructionBufferPtr[57], &waitForFlashbackByteLocation, sizeof(waitForFlashbackByteLocation));
+    memcpy(&instructionBufferPtr[62], &ii->gpBaseLocation, sizeof(ii->gpBaseLocation));
+    instructionBufferPtr[70] = ii->gpBaseMpSoundOffset;
+    instructionBufferPtr[73] = ii->mpSoundHandlerOffset;
+    instructionBufferPtr[76] = ii->m_lstSoundEntriesOffset;
+    memcpy(&instructionBufferPtr[90], &ii->strncmpCallBytes[2], sizeof(uint32_t));
+    instructionBufferPtr[102] = ii->nodeCSoundEntryOffset;
+    memcpy(&instructionBufferPtr[123], &ii->spacePerFlashbackName, sizeof(ii->spacePerFlashbackName));
+    memcpy(&instructionBufferPtr[129], &ii->lengthOfCommonPrefix, sizeof(ii->lengthOfCommonPrefix));
+    memcpy(&instructionBufferPtr[135], &commonPrefixAddress, sizeof(commonPrefixAddress));
+    memcpy(&instructionBufferPtr[147], &ii->lengthOfCommonPrefix, sizeof(ii->lengthOfCommonPrefix));
+    memcpy(&instructionBufferPtr[152], &firstFlashbackNameAddress, sizeof(firstFlashbackNameAddress));
+    memcpy(&instructionBufferPtr[163], &noMoreFlashbackNamesAddress, sizeof(noMoreFlashbackNamesAddress));
+    instructionBufferPtr[198] = ii->soundChannelOffset;
+    instructionBufferPtr[209] = ii->getPausedOffset;
+    instructionBufferPtr[212] = ii->getLoopingOffset;
+    instructionBufferPtr[217] = ii->isPlayingOffset;
+    instructionBufferPtr[226] = ii->getElapsedTimeOffset;
+    instructionBufferPtr[235] = ii->getTotalTimeOffset;
+    memcpy(&instructionBufferPtr[263], &ii->spacePerFlashbackName, sizeof(ii->spacePerFlashbackName));
+    memcpy(&instructionBufferPtr[270], &noMoreFlashbackNamesAddress, sizeof(noMoreFlashbackNamesAddress));
+    memcpy(&instructionBufferPtr[294], &secondsRemainingBeforeUnwaitAddress, sizeof(secondsRemainingBeforeUnwaitAddress));
+    memcpy(&instructionBufferPtr[306], &ii->sleepCallBytes, sizeof(ii->sleepCallBytes));
+    memcpy(&instructionBufferPtr[335], &backToAmnesiaWithWaitOffset, sizeof(backToAmnesiaWithWaitOffset));
 }
 
 
@@ -1248,10 +1297,10 @@ static bool injectOriginalMemory(
         } else {
 
             uint32_t byteToggleInstructionsStart = ii->injectedInstructionsLocation + sizeof(mainMenuDelayInstructions) + sizeof(mapDelayInstructions);
-            uint32_t afterByteToggleInstructionsStart = byteToggleInstructionsStart + 16;
+            uint32_t afterByteToggleInstructionsStart = byteToggleInstructionsStart + 32;
 
             uint32_t fromBeforeFadeOutAllOffset = byteToggleInstructionsStart - (ii->beforeFadeOutAllLocation + 5);
-            uint32_t fromGetStepSizeCallLocationOffset = afterByteToggleInstructionsStart - (ii->engineRunLocation + 5);
+            uint32_t fromRunMessageCallLocationOffset = afterByteToggleInstructionsStart - (ii->engineRunLocation + 5);
 
             memcpy(&call[1], &fromBeforeFadeOutAllOffset, sizeof(fromBeforeFadeOutAllOffset));
 
@@ -1259,9 +1308,9 @@ static bool injectOriginalMemory(
                 return false;
             }
 
-            memcpy(&call[1], &fromGetStepSizeCallLocationOffset, sizeof(fromGetStepSizeCallLocationOffset));
+            memcpy(&jmp[1], &fromRunMessageCallLocationOffset, sizeof(fromRunMessageCallLocationOffset));
 
-            if (!writeToProcessWithCacheFlush(ph, ii->engineRunLocation, 5, call, terminateAmnesia)) {
+            if (!writeToProcessWithCacheFlush(ph, ii->engineRunLocation, 5, jmp, terminateAmnesia)) {
                 return false;
             }
 
@@ -1269,6 +1318,9 @@ static bool injectOriginalMemory(
 
     }
     ///////////////////////////////////////////////////////////////
+
+    unsigned char test = 0xcc;
+    writeToProcessWithCacheFlush(ph, ii->runMessageLocation, 1, &test, terminateAmnesia);
 
     ////////////// injecting slippery physics bytes ///////////////
     if (
@@ -1338,6 +1390,8 @@ static bool injectDataAndInstructions(
         
         return false;
     }
+
+    printf("\ninstructions location: %08x\ndata location: %08x\n\n", ii->injectedInstructionsLocation, ii->injectedDataLocation);
 
     NTSTATUS ntFunctionStatus = NtSuspendProcess(ph->m_processHandle);
 
