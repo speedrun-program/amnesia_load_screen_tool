@@ -88,32 +88,34 @@ struct InjectionInfo {
 };
 
 
-class Circular256ByteBuffer {
+template <const size_t circularBufferSize>
+class CircularBuffer {
 
 public:
 
-    unsigned char m_buffer[256] = { 0 };
-    uint8_t m_start = 0;
+    static_assert(
+        circularBufferSize && ((circularBufferSize& (circularBufferSize - 1)) == 0),
+        "circularBufferSize needs to be a power of two and greater than zero.\n"
+        );
 
-    unsigned char operator[](const uint8_t idx) const {
+    unsigned char m_buffer[circularBufferSize] = { 0 };
+    size_t m_start = 0;
 
-        return m_buffer[(uint8_t)(idx + m_start)];
+    unsigned char operator[](const size_t idx) const {
+
+        return m_buffer[(idx + m_start) & (sizeof(m_buffer) - 1)];
     }
 
     void addToEnd(const unsigned char newEndValue) {
 
         m_buffer[m_start] = newEndValue;
-        m_start += 1;
+        m_start = (m_start + 1) & (sizeof(m_buffer) - 1);
     }
 
-    // NOTE: max copy size is 255 bytes, not 256, since howManyBytes max size is 255
-    void copyBytes(unsigned char* destination, const uint8_t startIdx, const uint8_t howManyBytes) const {
+    void copyBytes(unsigned char* destination, const size_t startIdx, const size_t howManyBytes) const {
 
-        for (uint8_t i = 0; i < howManyBytes; i++) {
-            destination[i] = m_buffer[(uint8_t)(m_start + i + startIdx)];
-            if ((uint8_t)(m_start + startIdx) >= 254) {
-                printf("destination: %02x %02x %02x %02x\n", destination[0], destination[1], destination[2], destination[3]);
-            }
+        for (size_t i = 0; i < howManyBytes; i++) {
+            destination[i] = m_buffer[(m_start + i + startIdx) & (sizeof(m_buffer) - 1)];
         }
     }
 };
@@ -590,7 +592,7 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
     bool alreadyInjected = false;
     size_t instructionPatternsFound = 0;
     unsigned char locationCopyBytes[sizeof(uint32_t)] = { 0 };
-    Circular256ByteBuffer memorySlice;
+    CircularBuffer<256> memorySlice;
 
     // filling 255 bytes, then the 256th byte gets added in the first iteration of the next loop,
     // that way the buffer is full and currentMemoryAddress is the byte at memorySlice[0]
@@ -629,7 +631,6 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
             
             ii->engineRunLocation = currentMemoryAddress + 40;
             memorySlice.copyBytes(locationCopyBytes, 41, sizeof(locationCopyBytes));
-            printf("%02x %02x %02x %02x\n", (uint8_t)locationCopyBytes[0], (uint8_t)locationCopyBytes[1], (uint8_t)locationCopyBytes[2], (uint8_t)locationCopyBytes[3]);
             memcpy(&ii->runMessageLocation, locationCopyBytes, sizeof(ii->runMessageLocation));
             ii->runMessageLocation += ii->engineRunLocation + 5;
 
@@ -1292,9 +1293,6 @@ static bool injectOriginalMemory(
 
     }
     ///////////////////////////////////////////////////////////////
-
-    unsigned char test = 0xcc;
-    writeToProcessWithCacheFlush(ph, ii->runMessageLocation, 1, &test, terminateAmnesia);
 
     ////////////// injecting slippery physics bytes ///////////////
     if (
