@@ -1,112 +1,111 @@
 
 https://github.com/speedrun-program/amnesia_load_screen_tool
 
+
 # INSTRUCTIONS
 
----------------------------------------------------------------------------------------------------
-how to make the game skip flashbacks in load screens:
----------------------------------------------------------------------------------------------------
-- **CHECK IF THE MODERATORS ALLOW THIS.**
-  when this was written, the mods said they wouldn't let people use this feature.
-  check if they allow this. If they don't, but you want to use it, tell them you think they should allow it.
 
-- in amnesia_settings.txt, set "skip flashbacks" to "y", "t", or "1".
-
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+amnesia_settings.txt settings
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 ---------------------------------------------------------------------------------------------------
-how to make the game wait through flashbacks in load screens:
+skip flashbacks
 ---------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "skip flashbacks" to "n", "f", or "0".
+Controls if flashback dialogue immediately ends in load screens, or if the dialogue keeps playing
+and the load screen stay up until the dialogue finishes.
 
-
----------------------------------------------------------------------------------------------------
-how to have menuing load delays for the main menu and for maps in quitouts which you quitout in:
----------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "delay files" to "y", "t", or "1".
-
-
----------------------------------------------------------------------------------------------------
-how to turn off the menuing load delays for the main menu and for maps in quitouts which you quitout in:
----------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "delay files" to "n", "f", or "0".
-
+options:
+(y / t / 1): Flashback dialogue ends when a load screen appears.
+(n / f / 0): Flashback dialogue keeps playing, instead the load screen stays up until the
+             dialogue finishes.
 
 ---------------------------------------------------------------------------------------------------
-how to enable consistent slippery physics:
+delay maps
 ---------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "enable consistent slippery physics" to "y", "t", or "1".
+Controls if map loads have extra load time added when loading them from the main menu, with extra
+load time being determined by the number of milliseconds written in the maps_and_delays.txt file.
+This setting is meant to help in quitouts runs if the map loads are normally too fast.
 
-
----------------------------------------------------------------------------------------------------
-how to turn off consistent slippery physics:
----------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "enable consistent slippery physics" to "n", "f", or "0".
-
-
----------------------------------------------------------------------------------------------------
-how to adjust load delays or add or remove maps in maps_and_delays.txt:
----------------------------------------------------------------------------------------------------
-- at the start of the line, write the map name followed by a forward slash.
-  avoid leading and trailing whitespace around the map name, because that will be seen as part of the name.
-
-- after the forward slash, put the delay in milliseconds.
-
-- example: "12_storage/ 1575"
-  this will give the loads from main menu for the Storage map a delay of 1575 milliseconds.
-
+options:
+(y / t / 1): Maps have extra load time added when loading them from the main menu.
+(n / f / 0): Maps have no extra load time added.
 
 ---------------------------------------------------------------------------------------------------
-how to add more flashbacks:
+enable consistent slippery physics
 ---------------------------------------------------------------------------------------------------
-- add the sound files to flashback_names.txt.
+Controls if slippery physics is set to always be present.
 
-- the sound files used by each flashback in are listed in the .flash files in \Amnesia The Dark Descent\flashbacks.
-
-- in English, the sound files are in \Amnesia The Dark Descent\lang\eng\voices\flashbacks.
-  in Russian, the sound files are in \Amnesia The Dark Descent\lang\rus\voices\flashbacks.
-  you can listen to them to check if they're the ones you want to skip.
-
+options:
+(y / t / 1): Slippery physics becomes always present.
+(n / f / 0): Slippery physics probability stays unchanged.
 
 ---------------------------------------------------------------------------------------------------
-how to add a delay to the main menu load time:
+allow unexpected game versions
 ---------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, adjust the "milliseconds main menu delay" setting.
+Controls if the injector will attempt to inject the game if it takes up an unexpected amount
+of space in memory.
 
-
----------------------------------------------------------------------------------------------------
-how to add a delay to quickload load times:
----------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, adjust the "milliseconds quickload delay" setting.
-
-- this only adds a delay to quickloads when there hasn't been any saves since last being in the main menu.
-  fortunately, this is the only type of quickload that's used in individual level runs.
-
+options:
+(y / t / 1): The injector tries to inject the game even if it's an unexpected size in memory.
+(n / f / 0): If the game is an unexpected size in memory, the injector doesn't try to inject.
 
 ---------------------------------------------------------------------------------------------------
-how to use the tool with versions of the game it wasn't specifically made for:
+check for tool updates
 ---------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "allow unexpected game versions" to "y", "t", or "1".
+Controls if the injector checks online, by reading the date in version_date.txt on the GitHub
+repository, if it has an update available.
 
-
----------------------------------------------------------------------------------------------------
-how to skip checking for updates when injecting Amnesia using the tool:
----------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "check for tool updates" to "n", "f", or "0".
-
+options:
+(y / t / 1): The injector checks if it has an update available.
+(n / f / 0): The injector skips checking if it has an update available.
 
 ---------------------------------------------------------------------------------------------------
-how to use the tool when it isn't, or might not be, the most recent version:
+allow not fully updated tool
 ---------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, set "allow not fully updated tool" to "y", "t", or "1".
+Controls if the injector still tries to inject the game even when it has an update available.
 
-
----------------------------------------------------------------------------------------------------
-how to adjust the amount of time that remains in a flashback dialogue line before the next map is entered:
----------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, adjust the "milliseconds remaining before unwait" setting.
-
+options:
+(y / t / 1): The injector still tries to inject the game when there's an update available.
+(n / f / 0): The injector only tries to inject the game when there's no update available.
 
 ---------------------------------------------------------------------------------------------------
-how to adjust the amount of time the program tries to check for updates before timing out:
+milliseconds main menu delay
 ---------------------------------------------------------------------------------------------------
-- in amnesia_settings.txt, adjust the "milliseconds update check timeout" setting.
+How many extra milliseconds to add to main menu loads. This setting is probably obsolete now that
+main menu time is ignored.
+
+---------------------------------------------------------------------------------------------------
+milliseconds quickload delay
+---------------------------------------------------------------------------------------------------
+How many extra milliseconds to add to quickload loads. Only applies to quickloads where the
+previous load was from the main menu, not to quickloads to quicksaves or map transition saves
+or debug menu map load saves. This setting is meant to help with IL runs if the quickloads
+are normally too fast.
+
+---------------------------------------------------------------------------------------------------
+milliseconds remaining before unwait
+---------------------------------------------------------------------------------------------------
+The number of milliseconds remaining in a flashback dialogue before the load screen ends.
+For example, with the value 435, load screens can end when there's 435 milliseconds or less
+remaining in a flashback line.
+
+---------------------------------------------------------------------------------------------------
+milliseconds update check timeout
+---------------------------------------------------------------------------------------------------
+How many milliseconds the injector should try to check online for updates before timing out and
+moving on.
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+flashback_names.txt
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Which flashbacks the game should check for to skip or wait through in load screens.
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+maps_and_delays.txt
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Which maps should have extra load time added when loading them from the main menu, and how much
+extra milliseconds should be added. For example, "16_cistern_entrance/   2500" adds an extra
+2500 milliseconds to the load screen when loading the cistern entrance map from the main menu.
