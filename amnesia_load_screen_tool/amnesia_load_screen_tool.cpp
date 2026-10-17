@@ -18,6 +18,7 @@
 #include "process_helper.h"         // ProcessHelper class
 #include "update_check.h"           // isMostRecentVersion function
 #include "injected_instructions.h"  // mainMenuDelayInstructions, mapDelayInstructions, flashbackSkipInstructions, and flashbackWaitInstructions
+#include "byte_signature_macros.h"  // BYTE_SIGNATURE_1 to BYTE_SIGNATURE_13
 
 
 typedef LONG(__stdcall* NTFUNCTION)(HANDLE);
@@ -605,25 +606,25 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
     for (size_t currentMemoryAddress = ph->m_textSegmentLocation; ph->getByte(&b); currentMemoryAddress++) {
         memorySlice.addToEnd(b);
 
-        if (memorySlice[0] == 0x8b && memorySlice[1] == 0x88 && memorySlice[6] == 0xe8 && memorySlice[11] == 0x8b && memorySlice[14] == 0x51) {
-            
-            if (memorySlice[26] == 0xe8 || memorySlice[26] == 0xe9) { // call or jmp
+        if (BYTE_SIGNATURE_1(memorySlice)) {
+
+            if (memorySlice[39] == 0xe8 || memorySlice[39] == 0xe9) { // call or jmp
                 alreadyInjected = true;
                 break;
             }
 
-            uint32_t beforeFadeOutAllLocation = currentMemoryAddress + 26;
+            uint32_t beforeFadeOutAllLocation = currentMemoryAddress + 39;
             memcpy(&ii->beforeFadeOutAllLocation, &beforeFadeOutAllLocation, sizeof(ii->beforeFadeOutAllLocation));
-            memorySlice.copyBytes(ii->beforeFadeOutAllBytes, 26, sizeof(ii->beforeFadeOutAllBytes));
-            memorySlice.copyBytes(locationCopyBytes, 34, sizeof(locationCopyBytes));
+            memorySlice.copyBytes(ii->beforeFadeOutAllBytes, 39, sizeof(ii->beforeFadeOutAllBytes));
+            memorySlice.copyBytes(locationCopyBytes, 47, sizeof(locationCopyBytes));
             memcpy(&ii->gpBaseLocation, locationCopyBytes, sizeof(ii->gpBaseLocation));
-            ii->gpBaseMpSoundOffset = memorySlice[42];
-            ii->mpSoundHandlerOffset = memorySlice[45];
+            ii->gpBaseMpSoundOffset = memorySlice[55];
+            ii->mpSoundHandlerOffset = memorySlice[58];
 
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0xd9 && memorySlice[1] == 0x45 && memorySlice[4] == 0x8b && memorySlice[10] == 0x6a && memorySlice[11] == 0x05) {
-            
+        } else if (BYTE_SIGNATURE_2(memorySlice)) {
+
             if (memorySlice[40] == 0xe9) { // jmp
                 alreadyInjected = true;
                 break;
@@ -636,50 +637,50 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
 
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0x8b && memorySlice[1] == 0x46 && memorySlice[3] == 0x8b && memorySlice[4] == 0x10 && memorySlice[5] == 0x3b && memorySlice[6] == 0xd0) {
-            
-            ii->m_lstSoundEntriesOffset = memorySlice[2];
-            ii->nodeCSoundEntryOffset = memorySlice[19];
+        } else if (BYTE_SIGNATURE_3(memorySlice)) {
+
+            ii->m_lstSoundEntriesOffset = memorySlice[8];
+            ii->nodeCSoundEntryOffset = memorySlice[25];
 
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0x56 && memorySlice[1] == 0x8b && memorySlice[7] == 0x75 && memorySlice[9] == 0x80) {
-            
+        } else if (BYTE_SIGNATURE_4(memorySlice)) {
+
             uint32_t cSoundEntryStopLocation = currentMemoryAddress;
             memcpy(&ii->cSoundEntryStopLocation, &cSoundEntryStopLocation, sizeof(ii->cSoundEntryStopLocation));
             ii->soundChannelOffset = memorySlice[17];
 
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0xdd && memorySlice[1] == 0xd8 && memorySlice[2] == 0x80 && memorySlice[11] == 0x80) {
-            
-            ii->isPlayingOffset = memorySlice[38];
-            ii->getPausedOffset = memorySlice[50];
-            ii->getLoopingOffset = memorySlice[69];
+        } else if (BYTE_SIGNATURE_5(memorySlice)) {
+
+            ii->isPlayingOffset = memorySlice[36];
+            ii->getPausedOffset = memorySlice[48];
+            ii->getLoopingOffset = memorySlice[67];
 
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0xd9 && memorySlice[1] == 0x05 && memorySlice[6] == 0x8b && memorySlice[13] == 0x17) {
-            
+        } else if (BYTE_SIGNATURE_6(memorySlice)) {
+
             ii->getTotalTimeOffset = memorySlice[29];
             ii->getElapsedTimeOffset = memorySlice[56];
 
             instructionPatternsFound += 1;
             
-        } else if (memorySlice[0] == 0x6a && memorySlice[1] == 0x0a && memorySlice[2] == 0xff && memorySlice[8] == 0x8b) {
-            
-            memorySlice.copyBytes(ii->sleepCallBytes, 2, sizeof(ii->sleepCallBytes));
+        } else if (BYTE_SIGNATURE_7(memorySlice)) {
+
+            memorySlice.copyBytes(ii->sleepCallBytes, 4, sizeof(ii->sleepCallBytes));
 
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0x6a && memorySlice[1] == 0x05 && memorySlice[7] == 0x53) {
-            
+        } else if (BYTE_SIGNATURE_8(memorySlice)) {
+
             memorySlice.copyBytes(ii->strncmpCallBytes, 8, sizeof(ii->strncmpCallBytes));
 
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0x8b && memorySlice[1] == 0x46 && memorySlice[3] == 0x53 && memorySlice[4] == 0x50 && memorySlice[5] == 0x8b && memorySlice[7] == 0xe8) {
-            
+        } else if (BYTE_SIGNATURE_9(memorySlice)) {
+
             if (memorySlice[74] == 0xe8) { // call
                 alreadyInjected = true;
                 break;
@@ -691,21 +692,21 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
 
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0x75 && memorySlice[2] == 0x8b && memorySlice[3] == 0xcf && memorySlice[9] == 0x68) {
-            
-            if (memorySlice[30] == 0xe8) { // call
+        } else if (BYTE_SIGNATURE_10(memorySlice)) {
+
+            if (memorySlice[21] == 0xe8) { // call
                 alreadyInjected = true;
                 break;
             }
 
-            uint32_t noSaveQuitLocation = currentMemoryAddress + 30;
+            uint32_t noSaveQuitLocation = currentMemoryAddress + 21;
             memcpy(&ii->noSaveQuitLocation, &noSaveQuitLocation, sizeof(ii->noSaveQuitLocation));
-            memorySlice.copyBytes(ii->noSaveQuitBytes, 30, sizeof(ii->noSaveQuitBytes));
+            memorySlice.copyBytes(ii->noSaveQuitBytes, 21, sizeof(ii->noSaveQuitBytes));
 
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0x8b && memorySlice[1] == 0x8a && memorySlice[11] == 0x68) {
-            
+        } else if (BYTE_SIGNATURE_11(memorySlice)) {
+
             if (memorySlice[32] == 0xe8) { // call
                 alreadyInjected = true;
                 break;
@@ -717,8 +718,8 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
 
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0x53 && memorySlice[1] == 0x68 && memorySlice[6] == 0xe8 && memorySlice[14] == 0x85) {
-            
+        } else if (BYTE_SIGNATURE_12(memorySlice)) {
+
             if (memorySlice[33] == 0xe9) { // jmp
                 alreadyInjected = true;
                 break;
@@ -735,9 +736,9 @@ static bool findInstructions(InjectionInfo* ii, ProcessHelper* ph) {
 
             instructionPatternsFound += 1;
 
-        } else if (memorySlice[0] == 0x89 && memorySlice[1] == 0x9a && memorySlice[6] == 0x8b && memorySlice[7] == 0x07) {
-            
-            uint32_t slipperyPhysicsLocation = currentMemoryAddress + 8;
+        } else if (BYTE_SIGNATURE_13(memorySlice)) {
+
+            uint32_t slipperyPhysicsLocation = currentMemoryAddress + 10;
             memcpy(&ii->slipperyPhysicsLocation, &slipperyPhysicsLocation, sizeof(ii->slipperyPhysicsLocation));
 
             instructionPatternsFound += 1;

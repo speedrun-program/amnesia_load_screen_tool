@@ -199,7 +199,7 @@ unsigned char flashbackSkipInstructions[208] = {
 };
 
 
-unsigned char flashbackWaitInstructions[336] = {
+unsigned char flashbackWaitInstructions[352] = {
 
     // entry point from cLuxMapHandler::CheckMapChange
     0xb1, 0x01,                                  // mov cl, 1
@@ -208,20 +208,20 @@ unsigned char flashbackWaitInstructions[336] = {
     0xc3,                                        // ret
 
     // int3 filler
-    // make sure entry point from cEngine::Run will be aligned by 16
-    0xcc,
+    // cEngine::Run entry point 32 byte alignment
+    0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
+    0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
+    0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
 
     // entry point from cEngine::Run
-    0xe8, 0x00, 0x00, 0x00, 0x00,                // call cEngine::GetStepSize
+    0xe8, 0x00, 0x00, 0x00, 0x00,                // call cUpdater::RunMessage
     0xa0, 0x00, 0x00, 0x00, 0x00,                // mov al, byte ptr [waitForFlashbackByteLocation]
     0x84, 0xc0,                                  // test al, al
-    0x75, 0x01,                                  // jnz over the ret
-    0xc3,                                        // ret
+    0x75, 0x05,                                  // jnz over the jmp instruction
+    0xe9, 0x00, 0x00, 0x00, 0x00,                // jmp back to amnesia (after the overwritten cUpdater::RunMessage call)
 
     0x56,                                        // push esi
     0x57,                                        // push edi
-    0x57,                                        // push edi // dummy push to save the float returned by cEngine::GetStepSize
-    0xd9, 0x1c, 0x24,                            // fstp dword ptr [esp]
     0x31, 0xc0,                                  // xor eax, eax
     0x86, 0x05, 0x00, 0x00, 0x00, 0x00,          // xchg al, byte ptr [waitForFlashbackByteLocation]
     0xa1, 0x00, 0x00, 0x00, 0x00,                // mov eax, dword ptr [gpBaseLocation]
@@ -350,12 +350,10 @@ unsigned char flashbackWaitInstructions[336] = {
 
     0x83, 0xc4, 0x10,                            // add esp, 16
     0x5b,                                        // pop ebx
-    0xd9, 0x04, 0x24,                            // fld dword ptr [esp]
-    0x5f,                                        // pop edi // dummy pop
     0x5f,                                        // pop edi
     0x5e,                                        // pop esi
-    0xc3,                                        // ret
+    0xe9, 0x00, 0x00, 0x00, 0x00,                // jmp back to amnesia (after the overwritten cUpdater::RunMessage call)
 
     // int3 filler
-    0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc
+    0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
 };
