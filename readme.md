@@ -100,12 +100,14 @@ moving on.
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 flashback_names.txt
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 Which flashbacks the game should check for to skip or wait through in load screens.
 
 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 maps_and_delays.txt
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 Which maps should have extra load time added when loading them from the main menu, and how much
 extra milliseconds should be added. For example, "16_cistern_entrance/   2500" adds an extra
 2500 milliseconds to the load screen when loading the cistern entrance map from the main menu.
