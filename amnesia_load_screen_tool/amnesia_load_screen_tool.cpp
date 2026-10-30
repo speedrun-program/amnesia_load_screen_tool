@@ -1585,7 +1585,7 @@ This tool might not work correctly with other versions of the game.\n%s",
         printf("Error when using VirtualAllocEx (error code %u).\n", GetLastError());
 
         getExitInput(false);
-        return false;
+        return EXIT_FAILURE;
     }
 
     ii.injectedInstructionsLocation = (uint32_t)extraMemoryPtr;
