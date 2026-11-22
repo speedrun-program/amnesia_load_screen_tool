@@ -96,7 +96,7 @@ public:
 
     static_assert(
         circularBufferSize && ((circularBufferSize& (circularBufferSize - 1)) == 0),
-        "circularBufferSize needs to be a power of two and greater than zero.\n"
+        "circularBufferSize needs to be a power of two and greater than zero."
         );
 
     unsigned char m_buffer[circularBufferSize] = { 0 };
@@ -275,7 +275,7 @@ milliseconds quickload delay: 0\r\n\
 milliseconds remaining before unwait: 435\r\n\
 milliseconds update check timeout: 5000\r\n";
 
-    static_assert(sizeof(defaultText) < sizeof(buffer), "amnesia_settings.txt defaultText is too big for buffer.\n");
+    static_assert(sizeof(defaultText) < sizeof(buffer), "amnesia_settings.txt defaultText is too big for buffer.");
 
     const char settingsFileName[] = "amnesia_settings.txt";
 
@@ -1330,7 +1330,7 @@ static bool injectDataAndInstructions(
 
     static_assert(
         sizeof(instructionBuffer) >= (sizeof(mainMenuDelayInstructions) + sizeof(mapDelayInstructions) + sizeof(flashbackWaitInstructions)),
-        "InstructionBuffer isn't big enough.\n"
+        "InstructionBuffer isn't big enough."
     );
 
     if (ii->mainMenuDelay != 0) {
