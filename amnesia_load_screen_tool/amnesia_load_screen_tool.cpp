@@ -1322,12 +1322,7 @@ static bool injectDataAndInstructions(
     }
     
     unsigned char instructionBuffer[1024] = { 0 };
-
-    static_assert(
-        sizeof(flashbackWaitInstructions) >= sizeof(flashbackSkipInstructions),
-        "flashback wait instructions are smaller than flashback skip instructions, so update the static_assert here"
-    );
-
+    
     static_assert(
         sizeof(instructionBuffer) >= (sizeof(mainMenuDelayInstructions) + sizeof(mapDelayInstructions) + sizeof(flashbackWaitInstructions)),
         "InstructionBuffer isn't big enough."
@@ -1549,7 +1544,7 @@ This tool might not work correctly with other versions of the game.\n%s",
 
     static_assert(
         sizeof(flashbackWaitInstructions) >= sizeof(flashbackSkipInstructions),
-        "flashback wait instructions are smaller than flashback skip instructions, so update the size calculation here"
+        "Flashback wait instructions are smaller than flashback skip instructions, so update the size calculation."
     );
 
     // space for instructions
